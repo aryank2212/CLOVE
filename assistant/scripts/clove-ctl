@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Drive the running Clove from a hotkey or script: clove-ctl dictate | wake | sleep | say <text> | ask <text> |
+focus <minutes> | status. Hyprland example (~/.config/hypr/bindings.conf):
+    bind = SUPER, D, exec, ~/path/to/clove/scripts/clove-ctl dictate
+    bind = SUPER, C, exec, ~/path/to/clove/scripts/clove-ctl wake"""
+import os
+import socket
+import sys
+from pathlib import Path
+
+sock = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "clove" / "ctl.sock"
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(15)
+try:
+    s.connect(str(sock))
+except OSError:
+    sys.exit("Clove isn't running (no control socket)")
+s.sendall((" ".join(sys.argv[1:]) or "status").encode() + b"\n")
+print(s.recv(65536).decode().strip())
