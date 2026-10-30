@@ -26,6 +26,10 @@ en, hi = agent({}), agent({"callhindi": True})
 check("English by default", "Speak English by default" in en._prompt() and "Speak Hindi" not in en._prompt())
 check("with the setting on, it speaks Hindi", "Speak Hindi" in hi._prompt() and "Speak English by default" not in hi._prompt())
 check("the setting: Hindi", hi.hindi and not en.hindi)
+check("the very first words are Hindi (no English greeting to copy)", 'Start by saying exactly "नमस्ते' in hi._prompt())
+check("the instructions open and close with: speak only Hindi",
+      hi._prompt().startswith("LANGUAGE: you speak ONLY Hindi") and hi._prompt().rstrip().endswith("they are for the owner)."))
+check("English calls keep the English greeting", 'Start by saying exactly "Hello' in en._prompt() and "नमस्ते" not in en._prompt())
 check("the recogniser is told the call is in Hindi", hi.turns.language == "hi" and en.turns.language is None)
 heard = []
 
