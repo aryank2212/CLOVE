@@ -16,6 +16,7 @@ from jobs import Job
 
 log = logging.getLogger("clove")
 DEDUPE_SECONDS = 25
+RESEND_GUARD_S = 60                  # the same message to the same chat is not sent again within this
 # A short spoken/typed answer while a plan waits for approval (checked in code, so a "yes" is never lost).
 YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|ok(ay)?|go ahead|go for it|do it|approved?|proceed|confirm(ed)?|"
                  r"please do|sounds good|alright|haan?|kar do|theek hai)\b", re.I)
@@ -616,6 +617,8 @@ class Toolbox:
     def __init__(self, clove):
         self.j = clove
         self.recent: dict[str, tuple[float, str]] = {}
+        self.sends: dict[tuple, float] = {}  # (chat, text) -> when it was sent: the same message is never sent twice
+        self.wa_open = ""                    # the WhatsApp chat wa_chat last opened
         self.calls: dict[str, int] = {}      # tool+args -> times called during the current user request
         self.utterance = 0
         self.actions_since_step = 0          # real actions since the last update_step
@@ -874,7 +877,20 @@ class Toolbox:
         if act == "group":
             args["tabs"] = a.get("tab") or a.get("text") or "current"
         slow = act in ("batch", "open", "navigate", "reload", "wa_chat", "wa_send", "back", "forward", "wait_for", "click", "fill")
+        send_key = None
+        if act == "wa_send" or (act == "type" and a.get("submit")):
+            send_key = (self.wa_open if act == "wa_send" else a.get("field", ""), " ".join(str(a.get("text", "")).split()))
+            when = self.sends.get(send_key)
+            if when is not None and time.monotonic() - when < RESEND_GUARD_S:
+                return (f"ALREADY SENT {int(time.monotonic() - when)}s ago: this exact message, to the same chat. "
+                        "Not sent again. Don't retry; tell him it was sent.")
         out = await bridge.call(act, timeout=50 if slow else 25, **args)
+        if act == "wa_chat" and out.startswith("opened WhatsApp chat"):
+            self.wa_open = a.get("name", "")
+        if send_key and not is_failure(out):
+            now = time.monotonic()
+            self.sends = {k: t for k, t in self.sends.items() if now - t < RESEND_GUARD_S}
+            self.sends[send_key] = now
         if out.startswith("error: the Chrome extension isn't connected"):
             from browser_bridge import SEEN
             if SEEN.exists():                     # installed, just not connected this moment: never nag about installing
