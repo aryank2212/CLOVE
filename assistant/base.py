@@ -98,6 +98,8 @@ class Assistant:
         self.messages = Notifications(self)      # message notifications: announced, and kept for "what came in?"
         from autoreply import AutoReply
         self.autoreply = AutoReply(self)         # answers WhatsApp messages for him when he turns it on
+        from call_watch import CallWatch
+        self.call_watch = CallWatch(self)        # picks up his WhatsApp calls when he turns it on
         from away import Away
         self.away = Away(self)                   # at the PC or not: messages go to Telegram while he's away
         from notch import Notch
@@ -695,7 +697,7 @@ class Assistant:
         bridge.on_stale = lambda have, want: (log.warning("Chrome extension is out of date (v%s, need v%s)", have, want),
                                               self.ui.send(type="notice", text=f"Reload the Clove Hands extension in Chrome (v{have} loaded, v{want} available): chrome://extensions"))
         await bridge.start()
-        tasks = [asyncio.create_task(c) for c in (self._ticker(), self._watch_audio_route(), self._narrator(), self._memory_keeper(), self._screen_feeder(), self._ctl(), self._phone(), self.messages.run(), self.away.run(),
+        tasks = [asyncio.create_task(c) for c in (self._ticker(), self._watch_audio_route(), self._narrator(), self._memory_keeper(), self._screen_feeder(), self._ctl(), self._phone(), self.messages.run(), self.away.run(), self.call_watch.run(),
                                                      self.dashboard.run())]
         self.send_engine()
         if not first:
