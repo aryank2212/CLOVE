@@ -79,6 +79,21 @@ pub async fn clove_tell(text: String) -> Result<(), String> {
     tokio::time::timeout(Duration::from_secs(10), talk).await.map_err(|_| "CLOVE didn't answer.".to_string())?
 }
 
+/// A new WhatsApp message from the gateway, for CLOVE to announce, show and answer like any other message
+/// (its notifications.py). Returns whether CLOVE took it: if not (CLOVE isn't running), the notch shows its
+/// own pill as before.
+pub async fn hand_message(message: Value) -> bool {
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.ok()?;
+        stream.write_all(format!("message {message}\n").as_bytes()).await.ok()?;
+        let mut reader = BufReader::new(stream);
+        let mut out = String::new();
+        reader.read_line(&mut out).await.ok()?;
+        Some(out.trim() == "ok")
+    };
+    tokio::time::timeout(Duration::from_secs(5), talk).await.ok().flatten().unwrap_or(false)
+}
+
 pub async fn send(chat: &Chat, query: String, context: Option<ChatContext>) -> Result<ChatReply, String> {
     let turn = chat.begin(CLOVE);
     let asked = with_context(&query, context.as_ref());

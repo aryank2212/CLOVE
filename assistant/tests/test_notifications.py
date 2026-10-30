@@ -156,5 +156,17 @@ async def away_scenario():
 
 
 asyncio.run(away_scenario())
+
+# ---- Clove Notch's WhatsApp link: who, their number, the text -----------------------------------------
+import ctl  # noqa: E402
+
+seen = []
+fake = SimpleNamespace(messages=SimpleNamespace(seen_note=lambda n: seen.append(n)))
+check("the notch's message is taken", ctl.incoming_message(fake, '{"app":"WhatsApp","sender":"Mum","number":"+919876543210","group":false,"text":"call me"}') == "ok")
+check("with name, number and text", seen and seen[0].who == "Mum (+919876543210)" and seen[0].body == "call me" and seen[0].platform == "WhatsApp")
+check("a broken one is refused", ctl.incoming_message(fake, "not json").startswith("error"))
+n = N.Note("Google Chrome", "Instagram", "You have unseen notifications.", "Instagram")
+check("Instagram's 'You have unseen notifications.' is not a message", N.FILLER.match(n.body) is not None)
+
 print("ALL PASSED" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

@@ -58,6 +58,8 @@ async def command(a, line: str) -> str:
         a.user_said(arg, typed=True)
         await a.send_text(arg)
         return "ok"
+    if cmd == "message" and arg:                 # a new message from Clove Notch's WhatsApp link (with who, number, text)
+        return incoming_message(a, arg)
     if cmd == "chat":                            # Clove Notch's chat (clove_chat.rs): answers as JSON
         return await chat(a, arg)
     if cmd == "agent_ask" and arg:               # an agent (via clove_mcp.py) needs his answer
@@ -74,6 +76,25 @@ async def command(a, line: str) -> str:
 
 
 _chat = {"brain": None, "lock": None}
+
+
+def incoming_message(a, arg: str) -> str:
+    """Clove Notch's WhatsApp link got a message: handle it like a notification (announce, banner, auto-reply,
+    Telegram while away). The sender's words are data, as from any notification."""
+    import json
+    from notifications import Note
+    try:
+        m = json.loads(arg)
+        note = Note(app=str(m.get("app") or "WhatsApp"), title=str(m.get("sender") or "")[:80],
+                    body=str(m.get("text") or "")[:400], platform=str(m.get("app") or "WhatsApp"))
+        note.handle = str(m.get("number") or "")[:40]
+        note.group = bool(m.get("group"))
+    except (ValueError, AttributeError):
+        return "error: not a message"
+    if not (note.title or note.body):
+        return "error: empty message"
+    a.messages.seen_note(note)
+    return "ok"
 
 
 async def chat(a, arg: str) -> str:

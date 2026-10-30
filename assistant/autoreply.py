@@ -55,7 +55,7 @@ class AutoReply:
         """Should this message get an automatic reply?"""
         if not self.on() or note.platform not in PLATFORMS or not note.sender or not note.body:
             return False
-        if not getattr(self.a, "client", None) or GROUP.match(note.body):
+        if not getattr(self.a, "client", None) or getattr(note, "group", False) or GROUP.match(note.body):
             return False
         now = time.monotonic()
         if now - self.last.get(note.sender, -REPLY_EVERY_S) < REPLY_EVERY_S:
