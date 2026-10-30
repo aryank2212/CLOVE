@@ -60,6 +60,8 @@ cell_call._json = lambda *a: ([{"name": "bluez_input.08_E4_DF_2B_BE_75.0"}, {"na
 check("the phone's own call audio, not the earbuds'", cell_call.bluetooth_nodes("F4:43:D0:34:1E:EE")
       == ("bluez_input.F4_43_D0_34_1E_EE.0", "bluez_output.F4_43_D0_34_1E_EE.1"))
 cell_call.CallAudio.teardown_leftovers = staticmethod(lambda: None)
+real_links = cell_call.links
+cell_call.links = lambda text=None: real_links(text) if text is not None else []   # never touch this PC's real links
 pa = cell_call.PhoneAudio(loop_to_speakers=True)
 pa.address = "F4:43:D0:34:1E:EE"
 pa.setup()
@@ -75,6 +77,26 @@ try:
     check("no phone audio: a clear error", False)
 except RuntimeError as e:
     check("no phone audio: a clear error", "Bluetooth" in str(e))
+
+
+# ---- the phone is never linked straight to the room while CLOVE has the call ---------------------------------
+PW = """alsa_input.pci-0000_06_00.6.HiFi__Mic1__source:capture_FL
+  |-> bluez_output.AC_00_7A_F2_F0_6C.1:playback_MONO
+bluez_input.AC_00_7A_F2_F0_6C.0:capture_MONO
+  |-> alsa_output.pci-0000_06_00.6.HiFi__Headphones__sink:playback_FL
+  |-> clove_from_call_loop:input_MONO
+clove_to_call.monitor:monitor_MONO
+  |-> bluez_output.AC_00_7A_F2_F0_6C.1:playback_MONO
+bluez_input.08_E4_DF_2B_BE_75.0:capture_MONO
+  |-> alsa_output.pci-0000_06_00.6.HiFi__Headphones__sink:playback_FL
+"""
+pairs = cell_call.links(PW)
+check("pw-link's list is read", len(pairs) == 5)
+cut = cell_call.direct_links(pairs, "AC_00_7A_F2_F0_6C")
+check("the room's mic -> the phone, and the phone -> the speakers, are cut",
+      sorted(o.split(":")[0] for o, _ in cut) == ["alsa_input.pci-0000_06_00.6.HiFi__Mic1__source", "bluez_input.AC_00_7A_F2_F0_6C.0"])
+check("CLOVE's own links stay", not any("clove" in o or "clove" in i for o, i in cut))
+check("other Bluetooth devices (earbuds) are left alone", not any("08_E4" in o for o, _ in cut))
 
 
 # ---- the watcher answers a ringing phone call -------------------------------------------------------------
@@ -109,6 +131,17 @@ async def main():
     check("the brief says it's his phone", "on his phone" in calls.phone[0][2])
     await w.check()
     check("not answered twice", len(calls.phone) == 1)
+    # a call he takes himself: the assistant stops listening, and listens again afterwards
+    a.muted, calls.task = False, None
+    w.phone_changed([{"path": "/ag1/call5", "state": "active", "number": "", "name": ""}])
+    check("during a phone call CLOVE isn't on, the assistant doesn't listen", a.muted is True)
+    w.phone_changed([])
+    check("and listens again when it ends", a.muted is False)
+    a.muted = True
+    w.phone_changed([{"path": "/ag1/call6", "state": "active", "number": "", "name": ""}])
+    w.phone_changed([])
+    check("a mute he set himself stays", a.muted is True)
+
     a.dashboard.prefs["answercalls"] = False
     w.answered_at = 0
     await asyncio.sleep(0.2)

@@ -11,6 +11,8 @@ works while the phone is in Bluetooth range of the PC.
 import json
 import logging
 import subprocess
+import threading
+import time
 
 from call_audio import FROM_CALL, TO_CALL, CallAudio, _json, _pactl
 
@@ -111,6 +113,33 @@ def bluetooth_nodes(address: str = "") -> tuple[str, str]:
     return src, sink
 
 
+def links(text: str | None = None) -> list[tuple[str, str]]:
+    """Every audio link as (output port, input port), from `pw-link -l`."""
+    if text is None:
+        try:
+            text = subprocess.run(["pw-link", "-l"], capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            return []
+    out, port = [], ""
+    for line in text.splitlines():
+        if not line.startswith(" "):
+            port = line.strip()
+        elif "|->" in line:
+            out.append((port, line.split("|->", 1)[1].strip()))
+    return out
+
+
+def direct_links(pairs: list[tuple[str, str]], tag: str) -> list[tuple[str, str]]:
+    """Links joining the phone straight to the PC's own microphone or speakers (what a car kit does): while CLOVE
+    is on the call they let the caller hear the room and the room hear the caller, past CLOVE."""
+    def phone(p):
+        return p.startswith(("bluez_input.", "bluez_output.")) and (not tag or tag in p.upper())
+
+    def device(p):
+        return p.startswith(("alsa_input.", "alsa_output."))
+    return [(o, i) for o, i in pairs if (phone(o) and device(i)) or (device(o) and phone(i))]
+
+
 class PhoneAudio(CallAudio):
     """CallAudio for a phone call over Bluetooth: no browser streams to move, just four loops.
 
@@ -145,7 +174,21 @@ class PhoneAudio(CallAudio):
         self.sink, self.owner_loop = sink, ""
         self.moved_in = {0: "bluetooth"}          # "the call's sound is routed" (the agent's no-sound check counts it)
         self.active = True
-        log.info("phone call audio ready (%s -> agent -> %s)", src, sink)
+        log.info("phone call audio ready (%s -> agent -> %s); links: %s", src, sink,
+                 [p for p in links() if "bluez" in p[0] or "bluez" in p[1]])
+        self._watch = threading.Thread(target=self._keep_apart, daemon=True)
+        self._watch.start()
+
+    def _keep_apart(self):
+        """The desktop links a phone call to the speakers and microphone by itself, and may do it again: undo it
+        while CLOVE has the call (not while he talks himself)."""
+        tag = self.address.replace(":", "_").upper()
+        while self.active:
+            if not self.owner_mic:
+                for o, i in direct_links(links(), tag):
+                    subprocess.run(["pw-link", "-d", o, i], capture_output=True, timeout=5)
+                    log.info("phone call: unlinked %s -> %s", o, i)
+            time.sleep(1)
 
     def route_once(self) -> tuple[int, int]:
         return 1, 1

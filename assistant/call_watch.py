@@ -16,7 +16,9 @@ import time
 import config
 
 log = logging.getLogger("clove.call_watch")
-POLL_S = 3
+POLL_S = 3                            # WhatsApp Web (asks Chrome)
+PHONE_POLL_S = 1                      # the phone line (a quick bus call): a ringing call is caught at once
+LIVE = ("incoming", "waiting", "dialing", "alerting", "active", "held")
 
 MISSION = """Someone is calling {owner} on {where} and you are answering for him. Greet them warmly, say you are \
 CLOVE, {owner}'s AI assistant, and that he can't take the call right now. Find out who is calling (if you don't \
@@ -33,24 +35,54 @@ class CallWatch:
     def __init__(self, a):
         self.a = a
         self.answered_at = 0.0
+        self.seen: dict[str, str] = {}       # phone call path -> last state, to log every change
+        self.quieted = False                 # the main assistant was muted for a phone call it isn't handling
+        self.was_muted = False
 
     def on(self) -> bool:
         return bool(self.a.dashboard.prefs.get("answercalls", False))
 
     async def run(self):
+        n = 0
         while True:
-            await asyncio.sleep(POLL_S)
+            await asyncio.sleep(PHONE_POLL_S)
+            n += 1
             try:
-                await self.check()
+                import cell_call
+                now = await asyncio.to_thread(cell_call.calls)
+                self.phone_changed(now)
+                if n % POLL_S == 0 or any(c["state"] == "incoming" for c in now):
+                    await self.check(now)
             except Exception as e:
                 log.warning("call watch: %s", e)
 
-    async def check(self):
+    def phone_changed(self, now: list[dict]):
+        """Log every change on the phone line, and keep the main assistant quiet during a phone call that its call
+        agent isn't handling: the call's sound comes out of the PC, and it must not hear the caller and answer them."""
+        states = {c["path"]: c["state"] for c in now}
+        for path, st in states.items():
+            if self.seen.get(path) != st:
+                log.info("phone line: %s %s", path.rsplit("/", 1)[-1], st)
+        for path in set(self.seen) - set(states):
+            log.info("phone line: %s ended", path.rsplit("/", 1)[-1])
+        self.seen = states
+        a = self.a
+        live = any(st in LIVE for st in states.values())
+        theirs = live and not a.calls.active           # a call he takes himself (or one ringing before CLOVE picks up)
+        if theirs and not self.quieted:
+            self.quieted, self.was_muted = True, bool(a.muted)
+            a.muted = True
+            log.info("phone call on the line: the assistant stops listening until it ends")
+        elif not theirs and self.quieted:
+            self.quieted = False
+            a.muted = self.was_muted
+    async def check(self, phone: list[dict] | None = None):
         a = self.a
         if not self.on() or a.calls.active or time.monotonic() - self.answered_at < 20:
             return
         import cell_call
-        ring = await asyncio.to_thread(cell_call.ringing)
+        ring = next((c for c in phone if c["state"] == "incoming"), None) if phone is not None \
+            else await asyncio.to_thread(cell_call.ringing)
         if ring:
             who = ring["name"] or ring["number"] or "an unknown number"
             log.info("incoming phone call from %s: answering", who)
