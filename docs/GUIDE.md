@@ -224,6 +224,8 @@ into `routines/*.md`) run on demand, headless, with Claude reading your Notion p
   "for yesterday").
 - **Editing a task in Claude?** Update the matching file in `routines/` (the body is the task's prompt). Clove adds
   a short voice adapter on top, so don't put the adapter in the file.
+- **Your own versions** go in `routines/local/` (git ignores it): a file there with the same `key` replaces the
+  default, so your prompts, links and trigger ids stay on your PC.
 - `ROUTINES_TERMINAL=on` shows a terminal while a routine runs; `CLOVE_ROUTINES_DRY_RUN=1` is a test switch that
   stops the night log from saving anything.
 

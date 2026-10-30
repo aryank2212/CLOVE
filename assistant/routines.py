@@ -16,6 +16,7 @@ from jobs import Job
 
 log = logging.getLogger("clove.routines")
 DIR = config.ROOT / "routines"
+LOCAL_DIR = DIR / "local"                            # your own routines, kept out of git; same name replaces a default
 WORKDIR = config.STATE_DIR / "routines"            # fixed cwd: `claude --resume` finds sessions per folder
 STATE = config.STATE_DIR / "routines.json"
 AWAIT, DONE = "[[AWAITING_USER]]", "[[DONE]]"
@@ -62,7 +63,7 @@ class Routine:
 
 def load() -> dict[str, Routine]:
     out = {}
-    for f in sorted(DIR.glob("*.md")):
+    for f in sorted(DIR.glob("*.md")) + sorted(LOCAL_DIR.glob("*.md")):
         m = re.match(r"---\n(.*?)\n---\n(.*)", f.read_text(), re.S)
         if not m:
             continue
