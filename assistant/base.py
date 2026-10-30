@@ -96,6 +96,8 @@ class Assistant:
         self.dashboard = Dashboard(self)
         from notifications import Notifications
         self.messages = Notifications(self)      # message notifications: announced, and kept for "what came in?"
+        from autoreply import AutoReply
+        self.autoreply = AutoReply(self)         # answers WhatsApp messages for him when he turns it on
         from away import Away
         self.away = Away(self)                   # at the PC or not: messages go to Telegram while he's away
         from notch import Notch

@@ -18,7 +18,7 @@ import config
 
 log = logging.getLogger("clove.dashboard")
 PREFS = config.STATE_DIR / "ui.json"
-DEFAULT_PREFS = {"wake": config.WAKE_WORD, "earcons": config.EARCONS, "compact": False, "pin": True, "reduce": False, "announce": True, "forward": True,
+DEFAULT_PREFS = {"wake": config.WAKE_WORD, "earcons": config.EARCONS, "compact": False, "pin": True, "reduce": False, "announce": True, "forward": True, "autoreply": False,
                  "workspace": ""}
 HISTORY = 60                                       # samples kept per metric (2 minutes at 2 s)
 SERVICE_EVERY_S = 45
@@ -394,7 +394,7 @@ class Dashboard:
         t = m.get("type")
         if t == "setting":
             k, v = m.get("key"), m.get("value")
-            if k in ("wake", "earcons", "pin", "reduce", "announce", "forward") and isinstance(v, bool):
+            if k in ("wake", "earcons", "pin", "reduce", "announce", "forward", "autoreply") and isinstance(v, bool):
                 self.prefs[k] = v
             elif k == "workspace" and isinstance(v, str):
                 v = os.path.expanduser(v.strip())
