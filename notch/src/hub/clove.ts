@@ -36,6 +36,8 @@ export class CloveFrame {
   private timer: number | null = null;
   private starting = false;
   private checking = false;
+  /** CLOVE's page said hello: the frame shows CLOVE, not an error page from a moment it wasn't answering. */
+  private alive = false;
 
   constructor(
     private readonly onView: (view: CloveView) => void,
@@ -47,6 +49,7 @@ export class CloveFrame {
       if (e.origin !== new URL(this.url).origin) return;
       const d = e.data as { type?: string; view?: string; count?: number } | null;
       if (!d || typeof d !== "object") return;
+      this.alive = true;
       if (d.type === "clove:view" && CLOVE_VIEWS.includes(d.view as CloveView)) {
         this.view = d.view as CloveView;
         this.onView(this.view);
@@ -94,7 +97,7 @@ export class CloveFrame {
     this.checking = true;
     try {
       const url = await windowUrl();
-      if (url && url === this.url && this.frame) return;
+      if (url && url === this.url && this.frame && this.alive) return;
       if (url) this.load(url);
       else if (this.frame || !this.el.firstChild) this.offline();
     } finally {
@@ -104,6 +107,7 @@ export class CloveFrame {
 
   private load(url: string) {
     this.url = url;
+    this.alive = false;
     this.starting = false;
     const frame = h("iframe", { title: "CLOVE", src: `${url}&embed=1&view=${this.view}` });
     frame.addEventListener("load", () => {
