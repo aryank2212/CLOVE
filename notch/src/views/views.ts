@@ -251,31 +251,7 @@ function buildOverview(actions: ViewActions): ViewHost {
     { class: "icon-btn jump", title: tl("Open"), onclick: () => actions.openTarget() },
     svg(ICONS.arrowUpRight, 8),
   );
-  // CLOVE fork: "Ask CLOVE…": type to CLOVE (when it's muted, or in a meeting). Enter sends, as if he had said it.
-  const askField = h("input", { class: "ask-field", type: "text", placeholder: tl("Ask CLOVE…"), spellcheck: false }) as HTMLInputElement;
-  const ask = h("div", { class: "ask-clove" }, askField);
-  askField.addEventListener("pointerdown", () => {
-    actions.keyboard(true);
-    window.setTimeout(() => askField.focus(), 120);
-  });
-  askField.addEventListener("input", () => actions.holdOpen(askField.value.trim().length > 0));
-  askField.addEventListener("keydown", (e) => {
-    e.stopPropagation();
-    if (e.key === "Enter" && askField.value.trim()) {
-      e.preventDefault();
-      actions.tellClove(askField.value.trim().slice(0, 2000));
-      askField.value = "";
-      askField.blur();
-    } else if (e.key === "Escape") {
-      askField.value = "";
-      askField.blur();
-    }
-  });
-  askField.addEventListener("blur", () => {
-    actions.holdOpen(false);
-    actions.keyboard(false);
-  });
-  const left = card(null, leftBody, jump, ask);
+  const left = card(null, leftBody, jump);
   const pills = h("div", { class: "pills" });
   // CLOVE fork: the shortcuts sit in a folder (a small square with their colours) that opens out to the full grid.
   let folderOpen = false;
@@ -548,8 +524,6 @@ function buildOverview(actions: ViewActions): ViewHost {
       if (State.cardSelection != null && State.cardSelection >= rows.length) State.cardSelection = null;
       highlightRow(rows, State.cardSelection, State.cardSelection !== shownSelection);
       shownSelection = State.cardSelection;
-      // The box sits in the card's empty bottom: only on a plain card (no list), and while CLOVE runs.
-      ask.hidden = !(mode === "card" && rows.length === 0 && !detailOpen && State.cloveMuted !== null) && document.activeElement !== askField;
       syncInbox();
 
       const others = State.otherTasks.slice(0, 4);
