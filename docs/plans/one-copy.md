@@ -24,7 +24,10 @@ answered, and the old folders are no longer used by anything (`lsof`, the servic
 - [x] Personal routines load from `assistant/routines/local/` (git ignores it); the three are copied there.
 - [x] `assistant/.venv` copied from the old folder (same packages); `notch/` built from this repository.
 - [x] Clove Notch's settings and WebKit data are already under the new names, with links at the old paths.
-- [ ] `assistant/.env` copied from the old folder (by the owner: it holds the keys).
-- [ ] Switch over: stop the old notch and service, install `clove-notch`, rename the desktop entries, point
-      `clove.service` here, start both, ask CLOVE a question, check the Claude Code status line.
+- [x] `assistant/.env` copied from the old folder (by the owner: it holds the keys).
+- [x] Switched over (30 Oct): `clove-notch` installed, desktop entries and icons renamed, `clove.service` and the
+      `clove` command point here. The first start moved the data folder and left links at the old paths. CLOVE
+      answered a typed question; the Claude Code status line runs; WhatsApp's gateway kept its link.
+- [ ] Re-add the Chrome extension from `assistant/chrome_extension` (it still loads from the old folder).
+- [ ] After a reboot: both start on their own.
 - [ ] Archive the old folders after a week.
