@@ -13,6 +13,8 @@ import {
 import { FlowBridge } from "../core/flow";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
+import { Tools, clockText, type LiveActivity } from "../core/tools";
+import { t } from "../i18n/i18n";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
@@ -1273,16 +1275,70 @@ export class Island {
     this.engine.setState(State.effectiveState);
   }
 
-  /** The clock sits in the middle of the compact island, where the notch is on a Mac. */
+  /** The clock sits in the middle of the compact island, where the notch is on a Mac. CLOVE fork: while something
+   *  runs (a timer, a recording, music…), its live activity takes the clock's place, like a Dynamic Island. */
   private updateClock() {
-    const on = State.mode === "compact" && State.settings.showClock;
+    const live = State.mode === "compact" ? Tools.live() : null;
+    const on = State.mode === "compact" && (State.settings.showClock || live != null);
     this.clockEl.style.opacity = on ? "1" : "0";
     if (!on) return;
+    if (live) {
+      this.showLive(live);
+      return;
+    }
+    if (this.clockEl.dataset.live) {
+      delete this.clockEl.dataset.live;
+      this.clockEl.className = "";
+      this.clockEl.replaceChildren();
+    }
     const now = new Date();
     const date = now.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
     const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const text = `${date}  ${time}`;
     if (this.clockEl.textContent !== text) this.clockEl.textContent = text;
+  }
+
+  /** CLOVE fork: the compact notch's live activity: a mark (pulsing dot, bars, hourglass) and its text. */
+  private showLive(live: NonNullable<LiveActivity>) {
+    const now = Date.now();
+    let mark: string;
+    let text: string;
+    switch (live.kind) {
+      case "ringing":
+        mark = "ring";
+        text = live.label ? t("Alarm {0}", { 0: live.label }) : t("Timer done");
+        break;
+      case "recording":
+        mark = "rec";
+        text = clockText(now - live.since);
+        break;
+      case "timer":
+        mark = "timer";
+        text = clockText(Math.max(0, live.endAt - now));
+        break;
+      case "timerPaused":
+        mark = "paused";
+        text = clockText(live.left);
+        break;
+      case "stopwatch":
+        mark = "stopwatch";
+        text = clockText(live.ms);
+        break;
+      case "media":
+        mark = "music";
+        text = live.artist ? `${live.title} · ${live.artist}` : live.title;
+        break;
+    }
+    const el = this.clockEl;
+    if (el.dataset.live !== mark) {
+      el.dataset.live = mark;
+      el.className = `live live-${mark}`;
+      const m = h("span", { class: "live-mark" });
+      if (mark === "music") for (let i = 0; i < 4; i++) m.append(h("i"));
+      el.replaceChildren(m, h("span", { class: "live-text" }));
+    }
+    const span = el.lastElementChild as HTMLElement;
+    if (span.textContent !== text) span.textContent = text;
   }
 
   /** Keep Clove Notch on screen: never let the compact island hide itself, and bring it back if it had. */

@@ -3,6 +3,7 @@
 // identically.
 
 import { APP_LOGOS, logoFor } from "./logos";
+import { buildControls, buildTime } from "./tools";
 import { h, svg, clear, dot } from "./dom";
 import { ICONS } from "./icons";
 import { Ticker } from "./ticker";
@@ -125,6 +126,9 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const tabHome = h("button", { class: "tab", title: tl("Overview"), onclick: () => go("overview") }, svg(ICONS.house, 13));
   const tabChat = h("button", { class: "tab", title: tl("Ask"), onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
   const tabDrop = h("button", { class: "tab", title: tl("Drop"), onclick: () => go("upload") }, svg(ICONS.plus, 13));
+  // CLOVE fork: the Controls and Time pages.
+  const tabControls = h("button", { class: "tab", title: tl("Controls"), onclick: () => go("controls") }, svg(ICONS.sliders, 13, { stroke: 2 }));
+  const tabTime = h("button", { class: "tab", title: tl("Time"), onclick: () => go("time") }, svg(ICONS.clockFace, 13, { stroke: 2 }));
 
   const gearBtn = h("button", { title: tl("Settings"), onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: tl("Mute"), onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
@@ -181,7 +185,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const el = h(
     "div",
     { id: "header" },
-    h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
+    h("div", { class: "tabs" }, tabHome, tabControls, tabTime, tabChat, tabDrop),
     unreadChips,
     h("div", { class: "header-actions" }, planPills, dictateBtn, recordBtn, openBtn, micBtn, soundBtn, gearBtn),
   );
@@ -194,6 +198,8 @@ export function buildHeader(actions: ViewActions): ViewHost {
       tabHome.classList.toggle("on", v === "overview" || v === "empty");
       tabChat.classList.toggle("on", v === "prompt");
       tabDrop.classList.toggle("on", v === "upload");
+      tabControls.classList.toggle("on", v === "controls");
+      tabTime.classList.toggle("on", v === "time");
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
@@ -1027,6 +1033,8 @@ export function buildViews(
   map.set("wardrobe", buildWardrobe(actions));
   map.set("update", buildUpdate());
   map.set("whatsNew", buildWhatsNew());
+  map.set("controls", buildControls());
+  map.set("time", buildTime());
   // Not in the Windows v1: sending a file by email, window attach + web result.
   map.set("mail", buildPlaceholder(tl("Sending by email isn't in this version."), ""));
   map.set("searching", buildPlaceholder(tl("Claude is searching…"), ""));

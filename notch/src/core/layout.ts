@@ -26,7 +26,10 @@ export type IslandViewName =
   | "recap"
   | "wardrobe"
   | "update"
-  | "whatsNew";
+  | "whatsNew"
+  // CLOVE fork: the Controls and Time pages (views/tools.ts).
+  | "controls"
+  | "time";
 
 export type BotStateName =
   | "idle"
@@ -102,6 +105,9 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   // After an update: what the new version brings, then "Your CLOVE so far".
   // Taller than a card, for two rows of items with their line.
   whatsNew: { height: 222, botX: 62, botY: null, botDiameter: 58, agentMode: "none" },
+  // CLOVE fork: two cards a little taller than the overview's; no CLOVE drawn over them.
+  controls: { height: 196, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
+  time: { height: 196, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
 };
 
 // The upload views above are only the fallback geometry. Once a file is actually

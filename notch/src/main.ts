@@ -1,5 +1,6 @@
 // Entry point: boot the bridge, wire Clove Notch, start the greeting.
 
+import { Tools } from "./core/tools";
 import "./style.css";
 import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
 import { Sound } from "./core/sound";
@@ -176,6 +177,29 @@ async function main() {
   cloveMicStatus();
 
   window.setInterval(cloveMicStatus, 15_000);
+
+  // CLOVE fork: the Controls and Time pages. Once a second: the timer, the stopwatch and alarms run on, and
+  // what they show is redrawn; the toggles and the music are asked of Rust while the Controls page is open,
+  // and now and then otherwise (the compact notch shows what's playing, or a recording).
+  Tools.onRing = () => island.alert("controls");
+  window.addEventListener("clove-fold", () => island.collapse());
+  let toolTicks = 0;
+  const toolsTick = () => {
+    toolTicks++;
+    const live = Tools.tick();
+    const page = State.mode === "expanded" && (State.view === "controls" || State.view === "time");
+    if (State.mode === "expanded" && State.view === "controls") {
+      if (toolTicks % 2 === 0) void Tools.refreshMedia();
+      if (toolTicks % 3 === 0) void Tools.refreshStatus();
+    } else if (!State.paused && State.mode !== "hidden") {
+      if (toolTicks % 5 === 0) void Tools.refreshMedia();
+      if (toolTicks % 10 === 0 || (Tools.status.recording && toolTicks % 3 === 0)) void Tools.refreshStatus();
+    }
+    if (live || page) State.notify();
+  };
+  void Tools.refreshStatus();
+  void Tools.refreshMedia();
+  window.setInterval(toolsTick, 1000);
   registerPhoneLink(island);
   registerIntegrationHandlers(island);
   registerShortcutHandlers(island, () => setPaused(false));

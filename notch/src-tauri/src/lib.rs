@@ -8,6 +8,7 @@ mod clove_chat;
 mod clove_window;
 mod codex_plan;
 mod config_file;
+mod controls;
 mod desktop;
 mod files;
 mod flow;
@@ -874,6 +875,10 @@ pub fn run() {
             clove_window::clove_start,
             clove_chat::clove_tell,
             clove_chat::clove_mute,
+            controls::controls_status,
+            controls::controls_action,
+            controls::media_state,
+            controls::media_control,
             set_paused,
             shortcuts_status,
             shortcuts_suspend,
