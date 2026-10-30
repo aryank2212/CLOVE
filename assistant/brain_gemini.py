@@ -316,7 +316,7 @@ class GeminiBrain:
     def _play(self, pcm: bytes):
         a = self.a
         a.awaiting = False
-        if a.mute_output:
+        if a.mute_output or a.muted:
             return
         a.last_audio = time.monotonic()
         if a.speaker:
