@@ -882,6 +882,14 @@ export class Island {
     this.pointerInside = inside;
   }
 
+  /** CLOVE fork: he clicked somewhere else: fold to compact, unless he's on Clove Notch or typing in it. */
+  focusElsewhere() {
+    if (State.mode !== "expanded" || State.isPinned || this.pointerInside === true || this.wasInIsland) return;
+    const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
+    if (typing || State.pendingApproval) return;
+    this.collapse();
+  }
+
   /** Cursor in window-logical coordinates. */
   onCursor(x: number, y: number) {
     // WebKitGTK can deliver a mousemove after the pointer has left the layer

@@ -61,6 +61,8 @@ async function main() {
 
   await onEvent<{ x: number; y: number }>("cursor", ({ x, y }) => island.onCursor(x, y));
   await onEvent<boolean>("pointer-inside", (inside) => island.setPointerInside(inside));
+  // CLOVE fork: a click on another window or the desktop (Hyprland) folds Clove Notch back to compact.
+  await onEvent<null>("focus-elsewhere", () => island.focusElsewhere());
 
   /** Pause has to reach Rust too, or the pollers keep calling out. */
   const setPaused = (on: boolean) => {
