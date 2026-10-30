@@ -188,7 +188,7 @@ class Notifications:
         import config
         a = self.a
         away = getattr(a, "away", None)
-        return bool(away and away.away and config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID
+        return bool(away and away.away and config.CLOVE_TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID
                     and a.dashboard.prefs.get("forward", True))
 
     async def _forward(self):
@@ -200,10 +200,9 @@ class Notifications:
         import phone
         text = "\n".join(f"{n.platform} · {n.sender}: {n.body}" if n.body else f"{n.platform} · {n.sender}"
                          for n in notes)
-        text += ("\n\nReply here and CLOVE sends it." if config.PHONE_INBOX
-                 else "\n\n(CLOVE, while you're away from the PC.)")
+        text += "\n\n(CLOVE, while you're away from the PC. Replies here aren't read: answer when you're back.)"
         try:
-            await asyncio.to_thread(phone.send, text)
+            await asyncio.to_thread(phone.send, text, config.CLOVE_TELEGRAM_BOT_TOKEN)
         except Exception as e:
             log.warning("could not forward to Telegram: %s", e)
             return

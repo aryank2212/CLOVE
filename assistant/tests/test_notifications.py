@@ -109,8 +109,16 @@ async def away_scenario():
         wake=SimpleNamespace(wake=lambda why: None), notify=notify)
     a.away = A.Away(a)
     w = N.Notifications(a)
-    config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, config.PHONE_INBOX = "t", "c", False
-    phone.send = lambda text: sent.append(text)
+    config.TELEGRAM_BOT_TOKEN, config.CLOVE_TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID = "hermes", "", "c"
+    phone.send = lambda text, token="": sent.append((text, token))
+
+    a.away.set(True)
+    w.seen_note(N.parse(payload("Google Chrome", "Ann", "web.whatsapp.com\n\nshared bot")))
+    await asyncio.sleep(0.2)
+    check("never through a bot another program reads (only CLOVE's own)", sent == [])
+    a.away.set(False)
+    w.seen.clear()
+    config.CLOVE_TELEGRAM_BOT_TOKEN = "clove"
 
     w.seen_note(N.parse(payload("Google Chrome", "Sam", "web.whatsapp.com\n\nat the PC")))
     await asyncio.sleep(0.2)
@@ -121,7 +129,8 @@ async def away_scenario():
     w.seen_note(N.parse(payload("Google Chrome", "Mum", "web.whatsapp.com\n\ndinner at 8")))
     await asyncio.sleep(0.2)
     check("away: messages arriving together are one Telegram message", len(sent) == 1)
-    check("with sender, app and text", sent and "LinkedIn · Priya: quick call?" in sent[0] and "WhatsApp · Mum: dinner at 8" in sent[0])
+    check("with sender, app and text", sent and "LinkedIn · Priya: quick call?" in sent[0][0] and "WhatsApp · Mum: dinner at 8" in sent[0][0])
+    check("sent with CLOVE's own bot", sent and sent[0][1] == "clove")
     check("still read out loud too, in case the guess is wrong", any("Priya" in t for t in told))
 
     prefs["forward"] = False
@@ -129,7 +138,7 @@ async def away_scenario():
     await asyncio.sleep(0.2)
     check("with the setting off nothing is forwarded", len(sent) == 1)
     prefs["forward"] = True
-    config.TELEGRAM_BOT_TOKEN = ""
+    config.CLOVE_TELEGRAM_BOT_TOKEN = ""
     w.seen_note(N.parse(payload("Google Chrome", "Dad", "web.whatsapp.com\n\nok again")))
     await asyncio.sleep(0.2)
     check("without Telegram set up nothing is forwarded", len(sent) == 1)

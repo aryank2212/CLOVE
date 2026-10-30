@@ -559,7 +559,7 @@ function renderSettings() {
     <div class="row"><div class="lab">Microphone<small>${S.route ? esc(S.route.label) : 'Device unknown'}</small></div>${sw('mic', !S.muted, 'Microphone')}</div>
     <div class="row"><div class="lab">Chimes<small>Short sounds when CLOVE hears you and when jobs finish.</small></div>${sw('earcons', p.earcons, 'Chimes')}</div>
     <div class="row"><div class="lab">Read out new messages<small>When WhatsApp, Instagram, X, LinkedIn and the like notify you, CLOVE says who wrote and offers to reply. Not during dictation, focus or a call.</small></div>${sw('announce', p.announce !== false, 'Read out new messages')}</div>
-    <div class="row"><div class="lab">Send messages to Telegram when I'm away<small>While the screen is locked, or nothing has moved for a while, new messages also go to your Telegram bot. Needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.</small></div>${sw('forward', p.forward !== false, 'Send messages to Telegram when away')}</div>
+    <div class="row"><div class="lab">Send messages to Telegram when I'm away<small>While the screen is locked, or nothing has moved for a while, new messages also go to your Telegram bot. Needs a Telegram bot of its own (CLOVE_TELEGRAM_BOT_TOKEN) and TELEGRAM_CHAT_ID.</small></div>${sw('forward', p.forward !== false, 'Send messages to Telegram when away')}</div>
   </div>
   <div class="label">Window</div><div class="card">
     ${EMBED ? '' : `<div class="row"><div class="lab">Compact companion<small>A small floating window in the bottom-right corner (Ctrl+J). Remembered at the next start.</small></div>${sw('compact', document.body.classList.contains('compact'), 'Compact companion')}</div>

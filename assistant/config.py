@@ -50,6 +50,9 @@ ASK_BEFORE_RISKY = _env("ASK_BEFORE_RISKY", "on").lower() != "off"
 # Optional Telegram notifications (for free call-me links)
 TELEGRAM_BOT_TOKEN = _env("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = _env("TELEGRAM_CHAT_ID")
+# CLOVE's own bot for messages it sends you on its own (messages while you're away). Not TELEGRAM_BOT_TOKEN when
+# another program (e.g. Hermes) reads that bot: your replies would go to it. Empty: nothing is forwarded.
+CLOVE_TELEGRAM_BOT_TOKEN = _env("CLOVE_TELEGRAM_BOT_TOKEN")
 # Full machine access (sudo) on this PC. Set SUDO_PASSWORD in .env (never in code).
 SUDO_PASSWORD = _env("SUDO_PASSWORD")
 # Voice brain: qwen3:8b fits entirely on the 8 GB GPU (~40 tokens/s, a tool call in under a second). The 27B

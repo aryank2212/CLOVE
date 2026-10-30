@@ -67,8 +67,9 @@ class Away:
     def set(self, away: bool) -> str:
         self.said_away = away
         if away:
-            return ("Away: his messages go to Telegram until he's back at the PC." if config.TELEGRAM_BOT_TOKEN
-                    else "Noted, but Telegram isn't set up, so messages can't be forwarded.")
+            return ("Away: his messages go to Telegram until he's back at the PC." if config.CLOVE_TELEGRAM_BOT_TOKEN
+                    else "Noted. Messages can't be forwarded: CLOVE has no Telegram bot of its own "
+                         "(CLOVE_TELEGRAM_BOT_TOKEN).")
         self.last_seen = time.monotonic()
         return "Back: messages are read out here again."
 
