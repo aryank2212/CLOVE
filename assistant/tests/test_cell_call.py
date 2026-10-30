@@ -82,6 +82,7 @@ pa.address = "AC:00:7A:F2:F0:6C"
 pa._keep_routed = lambda: None
 pa.setup()
 check("the caller goes to the agent, not the speakers", state_pa["si"]["sink"] == 70)
+check("the quiet phone line is turned up", ("set-sink-input-volume", "18651", cell_call.CALLER_GAIN) in cmds)
 check("the caller hears the agent, not the room", state_pa["so"]["source"] == 71)
 check("he hears both sides", sum("sink=@DEFAULT_SINK@" in " ".join(c) for c in cmds) == 2)
 check("the earbuds are never touched", earbuds["sink"] == 60)

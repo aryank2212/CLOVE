@@ -87,6 +87,7 @@ def _call_method(path: str, method: str) -> bool:
 
 
 TRANSPORT = "org.pipewire.Telephony.AudioGatewayTransport1"
+CALLER_GAIN = "250%"
 
 
 def open_audio(call_path: str) -> bool:
@@ -140,6 +141,7 @@ class PhoneAudio(CallAudio):
     Left alone, the desktop plays the caller on his speakers and records his room into the call."""
 
     address = ""                                  # the phone's Bluetooth address, set before setup
+    boosted = None                                # the caller stream whose volume was lifted
 
     def setup(self, attach: bool = False):
         self.teardown_leftovers()
@@ -181,6 +183,9 @@ class PhoneAudio(CallAudio):
             if sinks.get(si.get("sink")) != FROM_CALL:
                 self.moved_in.setdefault(caller, sinks.get(si.get("sink"), "@DEFAULT_SINK@"))
                 _pactl("move-sink-input", str(caller), FROM_CALL)
+            if caller != self.boosted:            # a phone line is quiet (speech ~400 where a call is ~1000+): lift it,
+                _pactl("set-sink-input-volume", str(caller), CALLER_GAIN)   # so turn-taking hears words, not noise
+                self.boosted = caller
             n_in = 1
         if to_phone is not None:
             want = "@DEFAULT_SOURCE@" if self.owner_mic else f"{TO_CALL}.monitor"
