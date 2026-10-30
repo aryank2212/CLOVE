@@ -476,9 +476,21 @@ class CallManager:
             st = await asyncio.to_thread(cell_call.state, path)
             return "phase: in_call" if st in ("active", "held") else "phase: ended" if st in ("gone", "disconnected") \
                 else f"phase: {st}"
+        answered = False
+
+        async def audio_here(seconds: float) -> bool:
+            for _ in range(int(seconds * 4)):                     # the Bluetooth audio appears once the phone sends it
+                if None not in await asyncio.to_thread(cell_call.bluetooth_nodes, self.audio.address):
+                    return True
+                await asyncio.sleep(0.25)
+            return False
         try:
+            self.audio.address = await asyncio.to_thread(cell_call.address_of, path)
+            await asyncio.to_thread(cell_call.open_audio, path)           # ask for the call's sound before answering
+            here = await audio_here(3)
             if not await asyncio.to_thread(cell_call.answer, path):
                 report = await self._fail("The phone didn't let me answer the call."); return
+            answered = True
             self.state = "connecting"
             for _ in range(20):
                 if "in_call" in await phase():
@@ -486,11 +498,13 @@ class CallManager:
                 await asyncio.sleep(0.5)
             else:
                 report = await self._fail("The call never connected (the caller may have hung up)."); return
-            self.audio.address = await asyncio.to_thread(cell_call.address_of, path)
-            for _ in range(20):                                   # the call's Bluetooth audio appears once it is live
-                if all(await asyncio.to_thread(cell_call.bluetooth_nodes, self.audio.address)):
-                    break
-                await asyncio.sleep(0.25)
+            if not here:
+                await asyncio.to_thread(cell_call.open_audio, path)       # some phones only send it once answered
+                here = await audio_here(6)
+            if not here:
+                await asyncio.to_thread(cell_call.hangup, path)           # never leave the caller in silence
+                report = await self._fail("I answered, but the phone kept the call's sound to itself, so I hung up "
+                                          "rather than leave the caller in silence."); return
             await asyncio.to_thread(self.audio.setup)
             self.state = "in call"
             self.agent = CallAgent(a, mission, who, "phone", self.audio, scope=self.scope, phase=phase)
@@ -499,6 +513,8 @@ class CallManager:
             await asyncio.to_thread(cell_call.hangup, path)
         except Exception as e:
             log.exception("phone call failed")
+            if answered:
+                await asyncio.to_thread(cell_call.hangup, path)           # never leave the caller in silence
             report = await self._fail(f"The phone call failed: {str(e)[:150]}")
         finally:
             self.state = "idle"

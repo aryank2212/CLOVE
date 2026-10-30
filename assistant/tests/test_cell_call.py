@@ -50,53 +50,54 @@ check("no ringing call: None", cell_call.ringing(objects(("active", "+911234", "
 check("a call's state", cell_call.state("/org/pipewire/Telephony/ag1/call0", raw) == "active")
 check("a dropped call is gone", cell_call.state("/org/pipewire/Telephony/ag1/call9", raw) == "gone")
 
-# ---- the audio: the Bluetooth call joined to the agent's two devices -------------------------------------
-loaded = []
-cell_call._pactl = lambda *a: (loaded.append(a), str(len(loaded)))[1] if a[0] == "load-module" else ""
-cell_call._json = lambda *a: ([{"name": "bluez_input.08_E4_DF_2B_BE_75.0"}, {"name": "bluez_input.F4_43_D0_34_1E_EE.0"},
-                               {"name": "alsa_input.mic"}] if a[1] == "sources"
-                              else [{"name": "bluez_output.08_E4_DF_2B_BE_75.1"}, {"name": "bluez_output.F4_43_D0_34_1E_EE.1"},
-                                    {"name": "alsa_output.speakers"}])
-check("the phone's own call audio, not the earbuds'", cell_call.bluetooth_nodes("F4:43:D0:34:1E:EE")
-      == ("bluez_input.F4_43_D0_34_1E_EE.0", "bluez_output.F4_43_D0_34_1E_EE.1"))
+# ---- the audio: the call's two streams moved to the agent's devices ---------------------------------------
+PHONE = "AC_00_7A_F2_F0_6C"
+state_pa = {"si": {"index": 18651, "sink": 60, "properties": {"node.name": f"bluez_input.{PHONE}.0"}},
+            "so": {"index": 18652, "source": 62, "properties": {"node.name": f"bluez_output.{PHONE}.1"}}}
+SINKS = [{"index": 60, "name": "alsa_output.speakers"}, {"index": 70, "name": "clove_from_call"}]
+SOURCES = [{"index": 62, "name": "alsa_input.mic"}, {"index": 71, "name": "clove_to_call.monitor"}]
+earbuds = {"index": 900, "sink": 60, "properties": {"node.name": "bluez_input.08_E4_DF_2B_BE_75.0"}}
+cmds = []
+
+
+def fake_pactl(*a):
+    cmds.append(a)
+    if a[0] == "load-module":
+        return str(len(cmds))
+    if a[0] == "move-sink-input":
+        state_pa["si"]["sink"] = next(x["index"] for x in SINKS if x["name"] == a[2])
+    if a[0] == "move-source-output":
+        name = {"@DEFAULT_SOURCE@": "alsa_input.mic"}.get(a[2], a[2])
+        state_pa["so"]["source"] = next(x["index"] for x in SOURCES if x["name"] == name)
+    return ""
+
+
+cell_call._pactl = fake_pactl
+cell_call._json = lambda *a: {"sink-inputs": [earbuds, state_pa["si"]], "source-outputs": [state_pa["so"]],
+                              "sinks": SINKS, "sources": SOURCES}[a[1]]
 cell_call.CallAudio.teardown_leftovers = staticmethod(lambda: None)
-real_links = cell_call.links
-cell_call.links = lambda text=None: real_links(text) if text is not None else []   # never touch this PC's real links
+check("the call's streams are found, not the earbuds'", cell_call.bluetooth_nodes("AC:00:7A:F2:F0:6C") == (18651, 18652))
 pa = cell_call.PhoneAudio(loop_to_speakers=True)
-pa.address = "F4:43:D0:34:1E:EE"
+pa.address = "AC:00:7A:F2:F0:6C"
+pa._keep_routed = lambda: None
 pa.setup()
-flat = [" ".join(a) for a in loaded]
-check("the caller's voice goes to the agent", any("source=bluez_input.F4_43_D0_34_1E_EE.0 sink=clove_from_call" in f for f in flat))
-check("the agent's voice goes to the caller", any("source=clove_to_call.monitor sink=bluez_output.F4_43_D0_34_1E_EE.1" in f for f in flat))
-check("he hears both sides", sum("sink=@DEFAULT_SINK@" in f for f in flat) == 2)
+check("the caller goes to the agent, not the speakers", state_pa["si"]["sink"] == 70)
+check("the caller hears the agent, not the room", state_pa["so"]["source"] == 71)
+check("he hears both sides", sum("sink=@DEFAULT_SINK@" in " ".join(c) for c in cmds) == 2)
+check("the earbuds are never touched", earbuds["sink"] == 60)
 pa.hand_mic_to_owner(True)
-check("taking over: his microphone goes to the caller", "source=@DEFAULT_SOURCE@ sink=bluez_output.F4_43_D0_34_1E_EE.1" in " ".join(loaded[-1]))
+check("taking over: the caller hears his microphone", state_pa["so"]["source"] == 62)
+pa.hand_mic_to_owner(False)
+check("handing back: the agent again", state_pa["so"]["source"] == 71)
+state_pa["si"]["sink"] = 60
+pa.route_once()
+check("moved back by the desktop: moved again", state_pa["si"]["sink"] == 70)
 cell_call._json = lambda *a: []
 try:
     cell_call.PhoneAudio().setup()
     check("no phone audio: a clear error", False)
 except RuntimeError as e:
     check("no phone audio: a clear error", "Bluetooth" in str(e))
-
-
-# ---- the phone is never linked straight to the room while CLOVE has the call ---------------------------------
-PW = """alsa_input.pci-0000_06_00.6.HiFi__Mic1__source:capture_FL
-  |-> bluez_output.AC_00_7A_F2_F0_6C.1:playback_MONO
-bluez_input.AC_00_7A_F2_F0_6C.0:capture_MONO
-  |-> alsa_output.pci-0000_06_00.6.HiFi__Headphones__sink:playback_FL
-  |-> clove_from_call_loop:input_MONO
-clove_to_call.monitor:monitor_MONO
-  |-> bluez_output.AC_00_7A_F2_F0_6C.1:playback_MONO
-bluez_input.08_E4_DF_2B_BE_75.0:capture_MONO
-  |-> alsa_output.pci-0000_06_00.6.HiFi__Headphones__sink:playback_FL
-"""
-pairs = cell_call.links(PW)
-check("pw-link's list is read", len(pairs) == 5)
-cut = cell_call.direct_links(pairs, "AC_00_7A_F2_F0_6C")
-check("the room's mic -> the phone, and the phone -> the speakers, are cut",
-      sorted(o.split(":")[0] for o, _ in cut) == ["alsa_input.pci-0000_06_00.6.HiFi__Mic1__source", "bluez_input.AC_00_7A_F2_F0_6C.0"])
-check("CLOVE's own links stay", not any("clove" in o or "clove" in i for o, i in cut))
-check("other Bluetooth devices (earbuds) are left alone", not any("08_E4" in o for o, _ in cut))
 
 
 # ---- the watcher answers a ringing phone call -------------------------------------------------------------

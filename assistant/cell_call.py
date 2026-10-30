@@ -1,9 +1,10 @@
 """His phone's normal (cellular) calls, through Bluetooth: the PC is his phone's hands-free kit, like a car.
 
 PipeWire (1.4+) speaks the hands-free protocol itself and offers the calls on the session bus as org.pipewire.Telephony,
-with the oFono interfaces (VoiceCall: State, LineIdentification, Name; Answer, Hangup). The call's sound is a
-Bluetooth source (the caller) and sink (what the caller hears), which PhoneAudio joins to the same two devices the
-call agent already uses for Chrome calls, so the agent itself doesn't change.
+with the oFono interfaces (VoiceCall: State, LineIdentification, Name; Answer, Hangup). The call's sound only comes
+to the PC once asked for (AudioGatewayTransport1.Activate), as two streams: the caller (playing) and what the caller
+hears (recording). PhoneAudio moves them to the same two devices the call agent uses for Chrome calls, so the agent
+itself doesn't change.
 
 Needs: Bluetooth on, and his phone paired with this PC and connected (on an iPhone: Settings › Bluetooth). It
 works while the phone is in Bluetooth range of the PC.
@@ -85,6 +86,20 @@ def _call_method(path: str, method: str) -> bool:
     return False
 
 
+TRANSPORT = "org.pipewire.Telephony.AudioGatewayTransport1"
+
+
+def open_audio(call_path: str) -> bool:
+    """Ask the phone to send the call's sound to the PC. A hands-free kit must ask for it (the phone keeps it
+    otherwise, and the PC shows no Bluetooth audio at all)."""
+    gateway = call_path.rsplit("/", 1)[0]
+    r = subprocess.run(["busctl", "--user", "call", SERVICE, gateway, TRANSPORT, "Activate"], capture_output=True,
+                       text=True, timeout=8)
+    if r.returncode != 0:
+        log.info("asking for the call's audio: %s", r.stderr.strip()[:160])
+    return r.returncode == 0
+
+
 def answer(path: str) -> bool:
     return _call_method(path, "Answer")
 
@@ -102,114 +117,90 @@ def address_of(call_path: str, raw: str | None = None) -> str:
     return str(_value(props.get("Address", "")) or "")
 
 
-def bluetooth_nodes(address: str = "") -> tuple[str, str]:
-    """(source, sink) of the phone's call audio: the Bluetooth hands-free devices PipeWire made for it. With the
-    phone's address, only its own (never earbuds that are connected too)."""
+def bluetooth_nodes(address: str = "") -> tuple[int | None, int | None]:
+    """The phone's call audio, as PipeWire makes it for a hands-free kit: two STREAMS (like an app's), not devices.
+    (caller -> PC: a playback stream, a "sink input"; PC -> caller: a recording stream, a "source output").
+    Returns their indexes, or None. With the phone's address, only its own (never earbuds connected too)."""
     tag = address.replace(":", "_").upper()
-    mine = (lambda n: tag in n.upper()) if tag else (lambda n: True)
-    src = next((s["name"] for s in _json("list", "sources") if s["name"].startswith("bluez_input.")
-                and not s["name"].endswith(".monitor") and mine(s["name"])), "")
-    sink = next((s["name"] for s in _json("list", "sinks") if s["name"].startswith("bluez_output.") and mine(s["name"])), "")
-    return src, sink
 
-
-def links(text: str | None = None) -> list[tuple[str, str]]:
-    """Every audio link as (output port, input port), from `pw-link -l`."""
-    if text is None:
-        try:
-            text = subprocess.run(["pw-link", "-l"], capture_output=True, text=True, timeout=5).stdout
-        except (OSError, subprocess.SubprocessError):
-            return []
-    out, port = [], ""
-    for line in text.splitlines():
-        if not line.startswith(" "):
-            port = line.strip()
-        elif "|->" in line:
-            out.append((port, line.split("|->", 1)[1].strip()))
-    return out
-
-
-def direct_links(pairs: list[tuple[str, str]], tag: str) -> list[tuple[str, str]]:
-    """Links joining the phone straight to the PC's own microphone or speakers (what a car kit does): while CLOVE
-    is on the call they let the caller hear the room and the room hear the caller, past CLOVE."""
-    def phone(p):
-        return p.startswith(("bluez_input.", "bluez_output.")) and (not tag or tag in p.upper())
-
-    def device(p):
-        return p.startswith(("alsa_input.", "alsa_output."))
-    return [(o, i) for o, i in pairs if (phone(o) and device(i)) or (device(o) and phone(i))]
+    def mine(item, prefix):
+        name = str((item.get("properties") or {}).get("node.name", ""))
+        return name.startswith(prefix) and (not tag or tag in name.upper())
+    caller = next((s["index"] for s in _json("list", "sink-inputs") if mine(s, "bluez_input.")), None)
+    to_phone = next((s["index"] for s in _json("list", "source-outputs") if mine(s, "bluez_output.")), None)
+    return caller, to_phone
 
 
 class PhoneAudio(CallAudio):
-    """CallAudio for a phone call over Bluetooth: no browser streams to move, just four loops.
+    """CallAudio for a phone call over Bluetooth. The call's two streams are moved like a Chrome call's:
 
-        the caller (Bluetooth source)  ->  clove_from_call   (the agent listens)
-        clove_to_call's monitor (the agent's voice)  ->  the Bluetooth sink  (the caller hears it)
-        and both looped to his speakers, as for Chrome calls."""
+        the caller (playback stream)  ->  clove_from_call   (the agent listens; looped to his speakers)
+        clove_to_call's monitor (the agent's voice)  ->  the phone's recording stream  (the caller hears it)
+
+    Left alone, the desktop plays the caller on his speakers and records his room into the call."""
 
     address = ""                                  # the phone's Bluetooth address, set before setup
 
     def setup(self, attach: bool = False):
         self.teardown_leftovers()
-        src, sink = bluetooth_nodes(self.address)
-        if not src or not sink:
+        caller, to_phone = bluetooth_nodes(self.address)
+        if caller is None or to_phone is None:
             raise RuntimeError("the phone's call audio isn't on this PC (is the phone connected over Bluetooth?)")
         for args in (
             ("module-null-sink", f"sink_name={TO_CALL}", "sink_properties=device.description=Clove_voice_into_call"),
             ("module-null-sink", f"sink_name={FROM_CALL}", "sink_properties=device.description=Sound_from_call_to_Clove"),
-            ("module-loopback", f"source={src}", f"sink={FROM_CALL}", "latency_msec=40"),
-            ("module-loopback", f"source={TO_CALL}.monitor", f"sink={sink}", "latency_msec=40"),
         ):
             out = _pactl("load-module", *args)
             if not out.isdigit():
                 self.teardown()
-                raise RuntimeError(f"could not connect the phone's call audio ({args[0]})")
+                raise RuntimeError(f"could not create the virtual audio device ({args[0]})")
             self.modules.append(out)
-        if self.loop_to_speakers:
-            for s in (FROM_CALL, TO_CALL):
-                out = _pactl("load-module", "module-loopback", f"source={s}.monitor", f"sink={self.speaker_sink}",
+        if self.loop_to_speakers:                 # he hears both sides, as for Chrome calls
+            for src in (FROM_CALL, TO_CALL):
+                out = _pactl("load-module", "module-loopback", f"source={src}.monitor", f"sink={self.speaker_sink}",
                              "latency_msec=50")
                 if out.isdigit():
                     self.modules.append(out)
-        self.sink, self.owner_loop = sink, ""
-        self.moved_in = {0: "bluetooth"}          # "the call's sound is routed" (the agent's no-sound check counts it)
         self.active = True
-        log.info("phone call audio ready (%s -> agent -> %s); links: %s", src, sink,
-                 [p for p in links() if "bluez" in p[0] or "bluez" in p[1]])
-        self._watch = threading.Thread(target=self._keep_apart, daemon=True)
+        self.route_once()
+        log.info("phone call audio ready (caller stream %s -> agent, agent -> phone stream %s)", caller, to_phone)
+        self._watch = threading.Thread(target=self._keep_routed, daemon=True)
         self._watch.start()
 
-    def _keep_apart(self):
-        """The desktop links a phone call to the speakers and microphone by itself, and may do it again: undo it
-        while CLOVE has the call (not while he talks himself)."""
-        tag = self.address.replace(":", "_").upper()
-        while self.active:
-            if not self.owner_mic:
-                for o, i in direct_links(links(), tag):
-                    subprocess.run(["pw-link", "-d", o, i], capture_output=True, timeout=5)
-                    log.info("phone call: unlinked %s -> %s", o, i)
+    def route_once(self) -> tuple[int, int]:
+        """The caller into clove_from_call; the phone's recording from CLOVE's voice (or his microphone, while he
+        has taken over). Remembers where they were, to put them back."""
+        if not self.active:
+            return 0, 0
+        caller, to_phone = bluetooth_nodes(self.address)
+        sinks = {s["index"]: s["name"] for s in _json("list", "sinks")}
+        sources = {s["index"]: s["name"] for s in _json("list", "sources")}
+        n_in = n_out = 0
+        if caller is not None:
+            si = next((x for x in _json("list", "sink-inputs") if x["index"] == caller), {})
+            if sinks.get(si.get("sink")) != FROM_CALL:
+                self.moved_in.setdefault(caller, sinks.get(si.get("sink"), "@DEFAULT_SINK@"))
+                _pactl("move-sink-input", str(caller), FROM_CALL)
+            n_in = 1
+        if to_phone is not None:
+            want = "@DEFAULT_SOURCE@" if self.owner_mic else f"{TO_CALL}.monitor"
+            so = next((x for x in _json("list", "source-outputs") if x["index"] == to_phone), {})
+            now = sources.get(so.get("source"))
+            if (self.owner_mic and now in (f"{TO_CALL}.monitor", None)) or (not self.owner_mic and now != f"{TO_CALL}.monitor"):
+                self.moved_out.setdefault(to_phone, now or "@DEFAULT_SOURCE@")
+                _pactl("move-source-output", str(to_phone), want)
+            n_out = 1
+        return n_in, n_out
+
+    def _keep_routed(self):
+        while self.active:                        # the desktop may put them back on the speakers and microphone
+            self.route_once()
             time.sleep(1)
 
-    def route_once(self) -> tuple[int, int]:
-        return 1, 1
-
     def adopt_all(self):
-        return 1, 1
-
-    def give_back_streams(self):
-        self.moved_in.clear()
+        return self.route_once()
 
     def hand_mic_to_owner(self, on: bool):
-        """He talks himself: his microphone goes to the caller too; off again when he hands back."""
+        """He talks himself: the phone records his microphone; back to CLOVE's voice when he hands back."""
         self.owner_mic = on
-        if on and not self.owner_loop:
-            out = _pactl("load-module", "module-loopback", "source=@DEFAULT_SOURCE@", f"sink={self.sink}",
-                         "latency_msec=40")
-            if out.isdigit():
-                self.owner_loop = out
-                self.modules.append(out)
-        elif not on and self.owner_loop:
-            _pactl("unload-module", self.owner_loop)
-            if self.owner_loop in self.modules:
-                self.modules.remove(self.owner_loop)
-            self.owner_loop = ""
+        self.route_once()
