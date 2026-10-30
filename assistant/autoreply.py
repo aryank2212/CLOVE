@@ -5,8 +5,8 @@ to that chat; then CLOVE tells him who wrote, what, and what it answered. The me
 the model that reads it can do nothing but write text, and that text can only go back to the same person.
 
 Limits, so it never runs away:
-- WhatsApp only (the one app CLOVE sends to reliably, through WhatsApp Web in Chrome); other apps are announced
-  and he decides.
+- WhatsApp (through WhatsApp Web in Chrome) and Instagram DMs that came through Instagram's API (instagram.py):
+  the apps CLOVE sends to reliably. Other apps are announced and he decides.
 - Never in a group chat (a group's notification reads "Sender: message").
 - One automatic reply per person per REPLY_EVERY_S, and at most MAX_PER_HOUR in all (two assistants answering
   each other would otherwise never stop).
@@ -23,7 +23,7 @@ import config
 log = logging.getLogger("clove.autoreply")
 REPLY_EVERY_S = 30 * 60
 MAX_PER_HOUR = 20
-PLATFORMS = {"WhatsApp"}
+PLATFORMS = {"WhatsApp", "Instagram"}     # Instagram only through its API (a message that came from it)
 GROUP = re.compile(r"^~?\s?[\w .'’()-]{1,40}:\s")       # "Sam: see you" in a group's notification
 
 PROMPT = """You reply to a WhatsApp message on behalf of {user}, who isn't answering right now. You are CLOVE, \
@@ -55,6 +55,8 @@ class AutoReply:
         """Should this message get an automatic reply?"""
         if not self.on() or note.platform not in PLATFORMS or not note.sender or not note.body:
             return False
+        if note.platform == "Instagram" and not getattr(note, "igsid", ""):
+            return False
         if not getattr(self.a, "client", None) or getattr(note, "group", False) or GROUP.match(note.body):
             return False
         now = time.monotonic()
@@ -68,7 +70,7 @@ class AutoReply:
         """Write and send a reply. Returns what was sent, or None (skipped or failed: then he decides)."""
         self.last[note.sender] = time.monotonic()      # even if it fails: no retry storm on one person
         text = await self.draft(note)
-        if not text or not await self.send(note.sender, text):
+        if not text or not await self.send(note, text):
             return None
         self.sent.append(time.monotonic())
         log.info("auto-replied to %s on %s", note.sender, note.platform)
@@ -92,7 +94,12 @@ class AutoReply:
             return None
         return text
 
-    async def send(self, name: str, text: str) -> bool:
+    async def send(self, note, text: str) -> bool:
+        if note.platform == "Instagram":
+            import asyncio
+            import instagram
+            return await asyncio.to_thread(instagram.send, note.igsid, text)
+        name = note.sender
         from browser_bridge import bridge
         out = await bridge.call("wa_chat", timeout=50, name=name)
         if not out.startswith("opened WhatsApp chat") or f'"{name}"' not in out:

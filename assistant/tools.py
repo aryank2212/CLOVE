@@ -341,6 +341,9 @@ DECLARATIONS = [
     _fn("weather_outfit", "Weather + outfit suggestion.", {"location": _s("STRING")}),
     _fn("notifications", "The PC's recent notifications (messages on WhatsApp, Instagram, X, LinkedIn..., and others), "
         "newest last. For 'what did I miss', 'any messages', 'who texted me'.", {"platform": _s("STRING", "only this app, e.g. WhatsApp")}),
+    _fn("instagram_reply", "Reply to someone who messaged him on Instagram (by their name or @username), through "
+        "Instagram's API: no browser needed. Only within 24 hours of their last message.",
+        {"who": _s("STRING", "their name or @username, as announced"), "text": _s("STRING")}, ["who", "text"]),
     _fn("away", "He's leaving the PC (on=true: 'I'm heading out', 'I'll be away') or back (on=false). While away, "
         "message notifications are forwarded to his Telegram. It also ends by itself when he uses the PC again.",
         {"on": _s("BOOLEAN")}, ["on"]),
@@ -456,7 +459,7 @@ LOCAL_TOOLS = {                 # tool -> parameters it keeps (None = all). Thin
     "find_restaurant": ["cuisine","location"], "track_package": ["tracking_number","carrier"],
     "travel_plan": ["destination"], "log_habit": ["name","note"], "habit_status": ["name"],
     "list_habits": None, "summarize_document": ["path"], "run_scene": ["name"],
-    "list_scenes": None, "explain_contract": ["clause"], "weather_outfit": ["location"], "notifications": ["platform"], "away": ["on"],
+    "list_scenes": None, "explain_contract": ["clause"], "weather_outfit": ["location"], "notifications": ["platform"], "away": ["on"], "instagram_reply": ["who"],
     "find_jobs": ["role","location"], "cover_letter": ["role","company"],
     "palace_remember": ["location","item"], "palace_recall": ["location"], "palace_list": None,
     "guide": None, "pair_mode": None, "answer_agent": None, "dictate": None, "type_text": None, "focus": None, "learned_shortcuts": None, "second_opinion": None,
@@ -1231,6 +1234,8 @@ class Toolbox:
         if name == "explain_contract":
             import contract_explainer
             return await contract_explainer.explain(a.get("clause",""))
+        if name == "instagram_reply":
+            return await asyncio.to_thread(self.j.instagram.reply, a.get("who", ""), a.get("text", ""))
         if name == "away":
             return self.j.away.set(bool(a.get("on", True)))
         if name == "notifications":

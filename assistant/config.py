@@ -53,6 +53,14 @@ TELEGRAM_CHAT_ID = _env("TELEGRAM_CHAT_ID")
 # CLOVE's own bot for messages it sends you on its own (messages while you're away). Not TELEGRAM_BOT_TOKEN when
 # another program (e.g. Hermes) reads that bot: your replies would go to it. Empty: nothing is forwarded.
 CLOVE_TELEGRAM_BOT_TOKEN = _env("CLOVE_TELEGRAM_BOT_TOKEN")
+# Instagram DMs through Instagram's official API (instagram.py): his Meta app's long-lived token and app secret, and a
+# phrase of his choosing for the webhook setup. Meta reaches IG_WEBHOOK_PORT through a tunnel (every delivery is
+# checked against the app secret).
+IG_ACCESS_TOKEN = _env("IG_ACCESS_TOKEN")
+IG_APP_SECRET = _env("IG_APP_SECRET")
+IG_VERIFY_TOKEN = _env("IG_VERIFY_TOKEN")
+IG_WEBHOOK_HOST = _env("IG_WEBHOOK_HOST", "0.0.0.0")
+IG_WEBHOOK_PORT = int(_env("IG_WEBHOOK_PORT", "8790") or 8790)
 # Full machine access (sudo) on this PC. Set SUDO_PASSWORD in .env (never in code).
 SUDO_PASSWORD = _env("SUDO_PASSWORD")
 # Voice brain: qwen3:8b fits entirely on the 8 GB GPU (~40 tokens/s, a tool call in under a second). The 27B
