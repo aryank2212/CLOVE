@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CLOVE installer. Run it from the CLOVE folder:  ./install.sh
 # It sets up the assistant (a Python environment and your settings), then offers the login service, the Chrome
-# extension and the CLOVE island. Nothing needs root except installing missing system packages, which it only
+# extension and Clove Notch. Nothing needs root except installing missing system packages, which it only
 # suggests. Safe to run again: it keeps your settings and skips what is already done.
 set -euo pipefail
 
@@ -72,17 +72,17 @@ if ask "Open Chrome's extension page now to add it (two clicks)?"; then
   "$app/install_extension.sh" || warn "Could not open Chrome; run assistant/install_extension.sh later"
 fi
 
-bold "5. The CLOVE island (the notch at the top of the screen, and the CLOVE app)"
+bold "5. Clove Notch (the notch at the top of the screen, and the CLOVE app)"
 if command -v cargo >/dev/null && command -v npm >/dev/null; then
-  if ask "Build and install the island now (about 10 minutes the first time)?"; then
-    (cd "$here/island" && npm install --no-audit --no-fund && npx tauri build --no-bundle)
+  if ask "Build and install Clove Notch now (about 10 minutes the first time)?"; then
+    (cd "$here/notch" && npm install --no-audit --no-fund && npx tauri build --no-bundle)
     mkdir -p "$HOME/.local/bin"
-    install -m755 "$here/island/target/release/clove-island" "$HOME/.local/bin/clove-island"
-    install -m755 "$here/island/target/release/clove-island-hook" "$HOME/.local/bin/clove-island-hook"
-    ok "Installed to ~/.local/bin. Start it with:  clove-island"
+    install -m755 "$here/notch/target/release/clove-notch" "$HOME/.local/bin/clove-notch"
+    install -m755 "$here/notch/target/release/clove-notch-hook" "$HOME/.local/bin/clove-notch-hook"
+    ok "Installed to ~/.local/bin. Start it with:  clove-notch"
   fi
 else
-  warn "Building the island needs Rust (cargo) and Node.js (npm). Install them, then run ./install.sh again."
+  warn "Building Clove Notch needs Rust (cargo) and Node.js (npm). Install them, then run ./install.sh again."
 fi
 
 bold "6. Optional: the local brain (private, offline; needs an NVIDIA GPU with 8 GB)"

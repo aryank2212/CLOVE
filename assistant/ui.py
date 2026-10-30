@@ -1,5 +1,5 @@
-"""The CLOVE window: a tiny local web server and the page it serves (ui/). It is shown in the CLOVE island's window
-(its Assistant pages) when the island is installed, else in a Chrome app window.
+"""The CLOVE window: a tiny local web server and the page it serves (ui/). It is shown in Clove Notch's window
+(its Assistant pages) when Clove Notch is installed, else in a Chrome app window.
 Only this process talks to it (random port, per-run token, Origin check)."""
 import json
 import logging
@@ -118,12 +118,12 @@ class UI:
 
 
 def open_window(url: str, compact: bool = False):
-    """The CLOVE island's window on its Assistant page (it finds this window's address itself, in clove.url).
-    The compact companion, or no island: a Chrome --app window with its own profile, so it never touches your
+    """Clove Notch's window on its Assistant page (it finds this window's address itself, in clove.url).
+    The compact companion, or no notch: a Chrome --app window with its own profile, so it never touches your
     normal Chrome windows."""
-    island = shutil.which("clove-island")
-    if island and not compact:
-        subprocess.Popen([island, "--page", "assistant"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+    notch = shutil.which("clove-notch")
+    if notch and not compact:
+        subprocess.Popen([notch, "--page", "assistant"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
         return
     chrome = shutil.which("google-chrome") or shutil.which("google-chrome-stable") or shutil.which("chromium")

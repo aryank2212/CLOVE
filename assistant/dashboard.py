@@ -241,7 +241,7 @@ def _hypr(*args: str) -> str:
 def _clove_window() -> dict | None:
     try:
         return next((c for c in json.loads(_hypr("clients", "-j") or "[]") if c.get("title") == "CLOVE"
-                     and "island" not in (c.get("class", "") + c.get("initialClass", "")).lower()), None)
+                     and "notch" not in (c.get("class", "") + c.get("initialClass", "")).lower()), None)
     except ValueError:
         return None
 

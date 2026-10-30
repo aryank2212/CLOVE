@@ -1,6 +1,6 @@
-/* The CLOVE window. Same look as the CLOVE island's window (~/Projects/clove-island, windows/src/hub/hub.css): an
+/* The CLOVE window. Same look as Clove Notch's window (notch/src/hub/hub.css): an
    OLED-black sidebar, a graphite panel holding the pages, and a dark band on top of each page where the page's colour
-   glows in a corner. The tokens below are the island's; docs/DESIGN.md lists them for every CLOVE surface. */
+   glows in a corner. The tokens below are Clove Notch's; docs/DESIGN.md lists them for every CLOVE surface. */
 
 /* The wordmark: Eurostile Extended Bold when it is installed (a commercial font, not shipped), otherwise Michroma, an
    open-licence face in the same extended style (ui/fonts, SIL OFL). */
@@ -308,7 +308,7 @@ body.compact .composer textarea { min-height: 40px; padding: 10px 12px 2px; }
 body.compact .compact-only { display: inline-grid; position: absolute; top: 10px; right: 10px; }
 body.compact .hero { position: relative; }
 
-/* inside the CLOVE island's window: its sidebar and panel frame this one */
+/* inside Clove Notch's window: its sidebar and panel frame this one */
 body.embed { background: var(--panel); }
 body.embed .side, body.embed #to-compact { display: none; }
 body.embed .panel { margin: 0; border: 0; border-radius: 0; }

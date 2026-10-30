@@ -666,8 +666,8 @@ class Toolbox:
             self.plan = self.plan or {"title": "Approved", "steps": [], "approval": None}
         self.plan["approval"] = "approved" if approved else "declined"
         self.approved_until = time.time() + APPROVAL_MINUTES * 60 if approved else 0
-        if source != "on the island":
-            self.j.island.approval_settled()
+        if source != "on Clove Notch":
+            self.j.notch.approval_settled()
         self._push_plan()
         if approved:
             return (f"Approved by the user ({source}). Now do the steps ONE at a time: update_step(n, running), do it, "
@@ -790,7 +790,7 @@ class Toolbox:
             self.approved_until = 0
         self._push_plan()
         if needs_approval:
-            self.j.island.ask_approval(self.plan)
+            self.j.notch.ask_approval(self.plan)
         if needs_approval:
             return ("Plan shown with Approve/Cancel buttons. In ONE short sentence ask if you should go ahead, then STOP "
                     "and wait. If the user says yes, call record_approval(approved=true) before doing anything.")

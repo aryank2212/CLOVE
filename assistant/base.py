@@ -14,7 +14,7 @@ from audio import pick_route
 from daymem import DayMemory
 from jobs import Job, Jobs
 from routines import Routines
-from tools import LABELS as LABELS_ISLAND, Toolbox, describe, is_failure
+from tools import LABELS as LABELS_NOTCH, Toolbox, describe, is_failure
 
 log = logging.getLogger("clove")
 QUIET_TOOLS = {"update_step", "record_approval", "job_status"}     # shown in the plan card, not as activity rows
@@ -94,9 +94,9 @@ class Assistant:
         self.pair = Pair(self)
         from dashboard import Dashboard
         self.dashboard = Dashboard(self)
-        from island import Island
-        self.island = Island(self)             # the CLOVE island app at the top of the screen, when it runs
-        self._island_utt = -1
+        from notch import Notch
+        self.notch = Notch(self)             # Clove Notch app at the top of the screen, when it runs
+        self._notch_utt = -1
         self.connected = False
         # audio / visual state
         self.muted = False
@@ -168,8 +168,8 @@ class Assistant:
         if text and not (self.recent and self.recent[-1] == (role, text)):
             self.recent.append((role, text[:400]))
             if role == "assistant":
-                self._island_prompt()
-                self.island.reply(text)
+                self._notch_prompt()
+                self.notch.reply(text)
             try:
                 memory.add_turn(role, text)          # kept on disk, so it still knows after a restart
             except Exception:
@@ -417,8 +417,8 @@ class Assistant:
         quiet = name in QUIET_TOOLS
         if not quiet:
             self.activity(aid, kind, label, "running")
-            self._island_prompt()
-            self.island.tool_start(LABELS_ISLAND.get(name, name), label)
+            self._notch_prompt()
+            self.notch.tool_start(LABELS_NOTCH.get(name, name), label)
         steps = self.tools.link_steps(name)
         log.info("→ %s %s", name, a)
         self.busy += 1
@@ -445,16 +445,16 @@ class Assistant:
             fail = is_failure(out)
             self.activity(aid, kind, label, "fail" if fail else "ok", out.splitlines()[0][:110] if fail else "")
             if not out.startswith("NEEDS APPROVAL"):
-                self.island.tool_end(LABELS_ISLAND.get(name, name), not fail)
+                self.notch.tool_end(LABELS_NOTCH.get(name, name), not fail)
             if steps:
                 self.tools.finish_steps(steps, not fail)
         return out
 
-    def _island_prompt(self):
-        """The island shows what he asked once per request, when CLOVE starts working on it."""
-        if self.user_utt.strip() and self._island_utt != self.tools.utterance:
-            self._island_utt = self.tools.utterance
-            self.island.prompt(self.user_utt.strip())
+    def _notch_prompt(self):
+        """Clove Notch shows what he asked once per request, when CLOVE starts working on it."""
+        if self.user_utt.strip() and self._notch_utt != self.tools.utterance:
+            self._notch_utt = self.tools.utterance
+            self.notch.prompt(self.user_utt.strip())
 
     # ---- seeing the screen, pointing -----------------------------------------------
     def _capture_clean(self):
@@ -601,7 +601,7 @@ class Assistant:
             log.exception("post-processing %s failed", job.id)
         if job.label.startswith("[OpenCode"):
             asyncio.create_task(self._idle_ollama())
-        self.island.job_done(job.label, job.status == "done", job.result)
+        self.notch.job_done(job.label, job.status == "done", job.result)
         if job.meta.get("phone"):                      # started from his phone: text him the result as well
             import phone
             asyncio.create_task(asyncio.to_thread(phone.send, f"{job.label[:80]}: {job.status}\n{job.result[:1500]}"))

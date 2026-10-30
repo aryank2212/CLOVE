@@ -1,14 +1,13 @@
 # CLOVE design
 
-One look for every CLOVE surface. It is the CLOVE island's window (`~/Projects/clove-island`,
-`windows/src/hub/hub.css`), and everything else follows it:
+One look for every CLOVE surface. It is Clove Notch's window (`notch/src/hub/hub.css`), and everything else follows it:
 
 | Surface | Where |
 |---|---|
-| The island's window (hub): Assistant, Flow and Notch pages | `clove-island/windows/src/hub/` |
+| Clove Notch's window (hub): Assistant, Flow and Notch pages | `notch/src/hub/` |
 | The CLOVE window (Assistant pages in the hub, or its own Chrome window) | `ui/clove.css`, `ui/clove.js` |
 | The Chrome extension's popup | `chrome_extension/popup.html` |
-| The island's CLOVE pill and chat provider | `clove-island/windows/src/island/agents.ts`, `src/core/providers.ts` |
+| Clove Notch's CLOVE pill and chat provider | `notch/src/island/agents.ts`, `src/core/providers.ts` |
 
 Dark only: the brand is OLED black. There is no light theme to keep in step.
 
@@ -25,7 +24,7 @@ Dark only: the brand is OLED black. There is no light theme to keep in step.
 | `--secondary` / `--muted` | `#8e939c` / `#6b7079` | details / timestamps, group labels |
 | `--accent` | `#fb923c` (hover `#fdab63`, text on it `#170c04`) | the CLOVE orange: primary buttons, CLOVE's name, live state, sparklines |
 | `--ok` `--warn` `--crit` | `#34d399` `#f7b32b` `#ff453a` | health only, always with a word next to the dot |
-| switch on | `#22c55e` | the island's switches |
+| switch on | `#22c55e` | Clove Notch's switches |
 
 Each page's band has its own colour, glowing in its top-right corner: Conversation `#FB923C`, Activity `#3B9EFF`,
 Systems `#34D399`, Preferences `#8E939C` (the hub's own pages keep theirs, `hero.ts` THEMES).
@@ -38,7 +37,7 @@ Systems `#34D399`, Preferences `#8E939C` (the hub's own pages keep theirs, `hero
 - Monospace only for code, commands, paths, model names and identifiers.
 - Numbers that change (times, percentages, sizes): tabular figures.
 - The wordmark "CLOVE": Eurostile Extended Bold when installed (commercial, not shipped), else Michroma (SIL OFL,
-  shipped as `ui/fonts` and the island's `public/fonts`), 15px, `.1em` tracking.
+  shipped as `ui/fonts` and Clove Notch's `public/fonts`), 15px, `.1em` tracking.
 
 ## Shape and space
 
@@ -47,7 +46,7 @@ high. Page padding 22–26px; cards 14–16px inside; 8px between a label and it
 
 ## The mark
 
-Four sepals around a bud, in a state ring. Drawn by `drawCloveMark` (island, `src/mochi/engine.ts`) and `drawMark`
+Four sepals around a bud, in a state ring. Drawn by `drawCloveMark` (Clove Notch, `notch/src/mochi/engine.ts`) and `drawMark`
 (`ui/clove.js`) with the same geometry; the ring takes the state colour: orange, amber while a plan waits for
 approval, grey when nothing is connected. On the Conversation band it is CLOVE's presence (see README › Window).
 
