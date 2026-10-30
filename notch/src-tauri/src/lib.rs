@@ -872,6 +872,7 @@ pub fn run() {
             open_settings_window,
             clove_window::clove_window_url,
             clove_window::clove_start,
+            clove_chat::clove_tell,
             set_paused,
             shortcuts_status,
             shortcuts_suspend,

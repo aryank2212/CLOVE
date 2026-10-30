@@ -756,6 +756,14 @@ body {
 }
 
 /* Claude's final message on the finished card: one line, never past the card. */
+/* CLOVE fork: a message's text on the banner, two lines at most. */
+.sub.two-lines {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .title.one-line {
   white-space: nowrap;
   overflow: hidden;

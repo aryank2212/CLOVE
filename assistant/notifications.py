@@ -194,6 +194,9 @@ class Notifications:
             return
         self.seen = {k: t for k, t in self.seen.items() if now - t < REPEAT_S}
         self.seen[key] = now
+        notch = getattr(self.a, "notch", None)
+        if notch is not None:
+            notch.notice(note.platform, "message", note.sender, note.body)
         if self.forwarding():
             self.outbox.append(note)
             if self.send_at is None:
@@ -221,6 +224,9 @@ class Notifications:
         if reply is None:
             self._enqueue(note)
             return
+        notch = getattr(self.a, "notch", None)
+        if notch is not None:
+            notch.notice(note.platform, "replied", note.sender, reply)
         if self.announcing():
             import config
             await self.a.notify(auto_reply_note(note, reply, config.USER_NAME or "the user"))

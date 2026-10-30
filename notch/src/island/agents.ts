@@ -19,6 +19,19 @@ export const KNOWN_AGENTS: Record<string, KnownAgent> = {
   amp: { name: "Amp", color: "#F59E0B" },
   hermes: { name: "Hermes", color: "#C084FC" },
   "claude-desktop": { name: "Claude Desktop", color: "#D97757" },
+  // CLOVE fork: apps whose messages and calls CLOVE shows (CloveNotification events, hooks.ts).
+  "app-whatsapp": { name: "WhatsApp", color: "#25D366" },
+  "app-instagram": { name: "Instagram", color: "#E1306C" },
+  "app-telegram": { name: "Telegram", color: "#2AABEE" },
+  "app-x": { name: "X", color: "#E7E9EA" },
+  "app-linkedin": { name: "LinkedIn", color: "#0A66C2" },
+  "app-discord": { name: "Discord", color: "#5865F2" },
+  "app-slack": { name: "Slack", color: "#E01E5A" },
+  "app-messenger": { name: "Messenger", color: "#0084FF" },
+  "app-signal": { name: "Signal", color: "#3A76F0" },
+  "app-teams": { name: "Teams", color: "#6264A7" },
+  "app-gmail": { name: "Gmail", color: "#EA4335" },
+  "app-phone": { name: "Phone", color: "#34C759" },
 };
 
 /**

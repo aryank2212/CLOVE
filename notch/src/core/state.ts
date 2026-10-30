@@ -205,6 +205,17 @@ export const MAX_DIFFS_PER_PILL = 50;
 /** A pill's diffs are forgotten after an hour without a new one, as on macOS. */
 export const DIFF_TTL_MS = 3_600_000;
 
+/** CLOVE fork: one notification from CLOVE (hooks.ts › CloveNotification). */
+export interface CloveNotice {
+  pillId: string;
+  app: string;
+  /** message: a new message; ringing: a call is ringing; call: CLOVE is on a call; ended: a call CLOVE took is over;
+   *  replied: CLOVE answered a message for him. */
+  kind: "message" | "ringing" | "call" | "ended" | "replied";
+  sender: string;
+  text: string;
+}
+
 class AppState {
   mode: IslandMode = "hidden";
   view: IslandViewName = "overview";
@@ -232,6 +243,8 @@ class AppState {
   searchResult: SearchResult | null = null;
   chatHistory: ChatMessage[] = [];
   pendingApproval: ApprovalInfo | null = null;
+  /** CLOVE fork: the message or call the banner shows (a CloveNotification), like a phone's notification. */
+  notice: CloveNotice | null = null;
   /** The pill that was in front when the card came up; it comes back after. */
   focusBeforeApproval: string | null = null;
 

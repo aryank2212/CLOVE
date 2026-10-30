@@ -185,6 +185,7 @@ export class Island {
         else void Bridge.openSession(task?.sessionId ?? null, task?.sessionCwd ?? null);
       },
       // The ↗ button — same targets as openAgentTarget() on macOS.
+      tellClove: (text: string) => void Bridge.cloveTell(text),
       openTarget: () => {
         const task = State.focusTask;
         if (!task) return;

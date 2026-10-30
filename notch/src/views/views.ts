@@ -28,7 +28,7 @@ import { SPOTIFY_ID } from "../core/spotify";
 import { buildWhatsAppCard } from "./whatsapp";
 import { WHATSAPP_ID } from "../core/whatsapp";
 import type { Outfit, OutfitSelection } from "../mochi/wardrobe";
-import { language, t, tl, type Msg } from "../i18n/i18n";
+import { N_, language, t, tl, type Msg } from "../i18n/i18n";
 import type { ViewCommand } from "../island/shortcuts";
 
 export interface ViewActions {
@@ -43,6 +43,8 @@ export interface ViewActions {
   /** The ↗ button: opens whatever the focused pill points at. */
   openTarget(): void;
   openUrl(url: string): void;
+  /** CLOVE fork: tells CLOVE something as if he had said it (the banner's buttons). */
+  tellClove(text: string): void;
   decide(d: "allow" | "deny"): void;
   /** Answers the question Claude Code asked: question text → chosen label. */
   answer(answers: Record<string, string | string[]>): void;
@@ -721,6 +723,54 @@ function buildFinished(actions: ViewActions): ViewHost {
   };
 }
 
+// ── Message (CLOVE fork) ──────────────────────────────────────────────────────
+// A new message or a call, the way a phone shows it: the app, who, what, and what to do about it.
+
+const NOTICE_LABEL: Record<string, string> = {
+  message: N_("new message"),
+  ringing: N_("calling"),
+  call: N_("CLOVE is on the call"),
+  ended: N_("call ended"),
+  replied: N_("CLOVE replied"),
+};
+
+function buildMessage(actions: ViewActions): ViewHost {
+  const who = h("div");
+  const sender = h("div", { class: "title one-line" });
+  const text = h("div", { class: "sub two-lines" });
+  const row = h("div", { class: "actions" });
+  const el = h("div", { class: "view" }, card("soft", stack(116, 16, who, sender, text, row)));
+  let drawn = "";
+  return {
+    el,
+    sync() {
+      const n = State.notice;
+      const key = n ? `${n.pillId}|${n.kind}|${n.sender}|${n.text}` : "";
+      if (key === drawn) return;
+      drawn = key;
+      clear(who);
+      clear(row);
+      if (!n) return;
+      const task = State.tasks.find((x) => x.id === n.pillId) ?? null;
+      who.append(agentWho(task, t(NOTICE_LABEL[n.kind] ?? NOTICE_LABEL.message)));
+      sender.textContent = n.sender || n.app;
+      text.textContent = n.text;
+      const ok = btn(tl("OK"), "secondary", () => actions.collapse());
+      if (n.kind === "message") {
+        row.append(btn(tl("Reply"), "primary", () => {
+          actions.tellClove(`I want to reply to ${n.sender} on ${n.app}.`);
+          actions.collapse();
+        }), ok);
+      } else if (n.kind === "call") {
+        row.append(btn(tl("I'll take it"), "primary", () => actions.tellClove("I'll take this call myself.")),
+          btn(tl("End call"), "secondary", () => actions.tellClove("End the call.")));
+      } else {
+        row.append(ok);
+      }
+    },
+  };
+}
+
 // ── Confused ──────────────────────────────────────────────────────────────────
 
 function buildConfused(): ViewHost {
@@ -835,6 +885,7 @@ export function buildViews(
   map.set("question", buildQuestion(actions));
   map.set("error", buildError(actions));
   map.set("finished", buildFinished(actions));
+  map.set("message", buildMessage(actions));
   map.set("confused", buildConfused());
   map.set("note", buildNote());
   map.set("settings", buildSettings(actions));

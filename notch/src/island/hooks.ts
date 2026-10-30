@@ -48,6 +48,10 @@ function cancelStopTimer(id: string): boolean {
 const TURN_OVER = new Set(["Stop", "StopFailure", "UserPromptSubmit", "SessionEnd", "Interrupt"]);
 
 interface HookPayload {
+  /** CLOVE fork (CloveNotification): what kind, from whom, what. */
+  kind?: string;
+  sender?: string;
+  text?: string;
   hook_event_name?: string;
   request_id?: string;
   session_id?: string;
@@ -327,6 +331,38 @@ function handleHook(island: Island, payload: HookPayload) {
   const focused = State.focusId === agentId;
 
   switch (name) {
+    case "CloveNotification": {
+      // CLOVE fork: a message or a call CLOVE saw (its notifications.py / call_watch.py), shown like a phone's
+      // notification: the app's own pill, and the banner open for a few seconds.
+      const kind = (["message", "ringing", "call", "ended", "replied"] as const).find((k) => k === payload.kind) ?? "message";
+      const sender = toOneLine(String(payload.sender ?? "")).slice(0, 80);
+      const text = toOneLine(String(payload.text ?? "")).slice(0, 300);
+      ensurePill();
+      supersedeStop();
+      State.updateTask(agentId, kind === "call" || kind === "ringing" ? "working" : "finished");
+      const line = [sender, text].filter(Boolean).join(": ");
+      if (line) State.appendStep(agentId, line);
+      const pill = State.tasks.find((x) => x.id === agentId);
+      if (pill) pill.finalLine = line;
+      State.notice = { pillId: agentId, app: agentName(validAgent ?? ""), kind, sender, text };
+      Sound.play(kind === "ringing" ? "question" : kind === "ended" ? "finish" : "pop");
+      if (!State.pendingApproval) {                  // a card waiting for his answer is never covered
+        State.setFocus(agentId);
+        surface("message", true);
+      } else {
+        State.setPillBadge(agentId, "finished");
+      }
+      cancelStopTimer(agentId);
+      if (kind !== "call" && kind !== "ringing") {   // the pill stays while a call lasts, then a minute more
+        stopTimers.set(agentId, window.setTimeout(() => {
+          stopTimers.delete(agentId);
+          if (State.notice?.pillId === agentId) State.notice = null;
+          State.removeTask(agentId);
+        }, 60_000));
+      }
+      break;
+    }
+
     case "SessionStart":
       ensurePill();
       clearFinalLine(agentId);

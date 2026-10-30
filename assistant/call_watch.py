@@ -60,9 +60,13 @@ class CallWatch:
         """Log every change on the phone line, and keep the main assistant quiet during a phone call that its call
         agent isn't handling: the call's sound comes out of the PC, and it must not hear the caller and answer them."""
         states = {c["path"]: c["state"] for c in now}
-        for path, st in states.items():
+        notch = getattr(self.a, "notch", None)
+        for c in now:
+            path, st = c["path"], c["state"]
             if self.seen.get(path) != st:
                 log.info("phone line: %s %s", path.rsplit("/", 1)[-1], st)
+                if st == "incoming" and notch is not None:
+                    notch.notice("Phone", "ringing", c["name"] or c["number"] or "Unknown number")
         for path in set(self.seen) - set(states):
             log.info("phone line: %s ended", path.rsplit("/", 1)[-1])
         self.seen = states
@@ -92,6 +96,8 @@ class CallWatch:
             if started.startswith("error") or "already in progress" in started:
                 log.warning("could not answer the phone call: %s", started)
                 return
+            if getattr(a, "notch", None) is not None:
+                a.notch.notice("Phone", "call", who, "CLOVE is talking to them for you.")
             asyncio.create_task(self._after(who, "phone"))
             return
         from browser_bridge import bridge
@@ -110,6 +116,8 @@ class CallWatch:
         if started.startswith("error") or "already in progress" in started:
             log.warning("could not answer the call: %s", started)
             return
+        if getattr(a, "notch", None) is not None:
+            a.notch.notice("WhatsApp", "call", who or "WhatsApp call", "CLOVE is talking to them for you.")
         asyncio.create_task(self._after(who, "WhatsApp"))
 
     def caller(self) -> str:
@@ -131,6 +139,9 @@ class CallWatch:
         while calls.task is not None and not calls.task.done():
             await asyncio.sleep(2)
         report = getattr(calls, "last_report", "") or "The call ended."
+        notch = getattr(self.a, "notch", None)
+        if notch is not None:
+            notch.notice("Phone" if where == "phone" else "WhatsApp", "ended", who or "Call", report)
         what = "a phone call" if where == "phone" else "a WhatsApp call"
         text = f"📞 CLOVE answered {what} from {who or 'someone'}.\n\n{report}"
         token = config.CLOVE_TELEGRAM_BOT_TOKEN

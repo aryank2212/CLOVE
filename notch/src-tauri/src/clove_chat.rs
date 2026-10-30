@@ -59,6 +59,26 @@ pub async fn ask(query: &str) -> Result<String, String> {
     tokio::time::timeout(TIMEOUT, talk).await.map_err(|_| "CLOVE took too long to answer.".to_string())?
 }
 
+/// Tells CLOVE something as if he had said it ("Reply to Sam on WhatsApp", "I'll take this call"): a banner's
+/// buttons. CLOVE answers out loud, as to anything he says; only "ok" comes back here.
+#[tauri::command]
+pub async fn clove_tell(text: String) -> Result<(), String> {
+    let text = text.replace(['\n', '\r'], " ");
+    let text = text.trim();
+    if text.is_empty() || text.len() > 300 {
+        return Err("nothing to tell CLOVE".into());
+    }
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.map_err(|_| "CLOVE isn't running.".to_string())?;
+        stream.write_all(format!("ask {text}\n").as_bytes()).await.map_err(|e| e.to_string())?;
+        let mut reader = BufReader::new(stream);
+        let mut out = String::new();
+        reader.read_line(&mut out).await.map_err(|e| e.to_string())?;
+        if out.trim() == "ok" { Ok(()) } else { Err(format!("CLOVE: {}", out.trim())) }
+    };
+    tokio::time::timeout(Duration::from_secs(10), talk).await.map_err(|_| "CLOVE didn't answer.".to_string())?
+}
+
 pub async fn send(chat: &Chat, query: String, context: Option<ChatContext>) -> Result<ChatReply, String> {
     let turn = chat.begin(CLOVE);
     let asked = with_context(&query, context.as_ref());
