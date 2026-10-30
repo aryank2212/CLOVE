@@ -183,7 +183,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
     { id: "header" },
     h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
     unreadChips,
-    h("div", { class: "header-actions" }, planPills, dictateBtn, recordBtn, openBtn, micBtn, gearBtn, soundBtn),
+    h("div", { class: "header-actions" }, planPills, dictateBtn, recordBtn, openBtn, micBtn, soundBtn, gearBtn),
   );
   const headerActions = el.lastElementChild as HTMLElement;
 
