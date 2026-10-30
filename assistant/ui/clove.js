@@ -1,5 +1,5 @@
 // The CLOVE window. Everything shown comes from the backend over the local websocket; nothing is simulated.
-// It runs on its own (a Chrome app window) or inside the CLOVE island's window (?embed=1), where the island's
+// It runs on its own (a Chrome app window) or inside Clove Notch's window (?embed=1), where Clove Notch's
 // sidebar picks the page and this one leaves its own out.
 'use strict';
 const $ = id => document.getElementById(id);
@@ -40,11 +40,11 @@ function toast(text, level = 'info') {
 const reduced = () => document.body.classList.contains('reduce') || matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- drawing: one loop for every canvas, stopped when nothing is on screen ----------
-// The same look as the island's window (hub/hero.ts): a deep black, the page's colour breathing in a corner, and
+// The same look as Clove Notch's window (hub/hero.ts): a deep black, the page's colour breathing in a corner, and
 // particles that drift and move away from the pointer.
 const live = new Set();
 let frame = null, lastFrame = 0;
-const MIN_FRAME = EMBED ? 1000 / 30 : 0;          // inside the island (WebKitGTK) 30 fps is plenty
+const MIN_FRAME = EMBED ? 1000 / 30 : 0;          // inside Clove Notch (WebKitGTK) 30 fps is plenty
 function visible(el) { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight; }
 const animating = () => live.size > 0 && S.shown && document.visibilityState === 'visible' && !reduced();
 function loop(now) {
@@ -109,7 +109,7 @@ function backdrop(canvas, color) {
   } });
 }
 
-// ---------- the CLOVE mark: four sepals around a bud in a state ring (drawCloveMark of the island) ----------
+// ---------- the CLOVE mark: four sepals around a bud in a state ring (drawCloveMark of Clove Notch) ----------
 const SOFT = [231, 237, 245], ORANGE = rgb('#FB923C'), AMBER = rgb('#F7B32B'), GREY = rgb('#6B7079');
 function drawMark(x, R, accent, tint, open = 1, yaw = 0, pitch = 0, ring = true) {
   const mix = (a, b) => Math.round(a + (b - a) * tint * 0.55);
@@ -189,12 +189,12 @@ function headline() {
 }
 function substate() {
   if (!S.conn) return failures > 4
-    ? 'CLOVE is not answering at this address. If it restarted, open CLOVE again from the app grid or the island.'
+    ? 'CLOVE is not answering at this address. If it restarted, open CLOVE again from the app grid or Clove Notch.'
     : 'The CLOVE backend is not reachable. Reconnecting…';
   if (notice) return notice;
   return { sleeping: `Say "${wakeWord()}" to talk, or type below.`, idle: 'Go ahead, I am listening.', listening: 'Listening to you.',
            thinking: 'Working out a reply.', speaking: 'Esc or a click on the mark stops it.', working: `${S.tasks} job${S.tasks === 1 ? '' : 's'} running.`,
-           waiting: 'A plan is waiting: approve or reject it in Activity, by voice, or on the island.',
+           waiting: 'A plan is waiting: approve or reject it in Activity, by voice, or on Clove Notch.',
            dictating: 'Typing what you say into the focused window.', focus: 'Non-urgent updates are held until focus ends.',
            offline: 'Add GEMINI_API_KEY to .env or install Qwen, then restart CLOVE.' }[S.state] || '';
 }
@@ -526,7 +526,7 @@ function renderMini() {
   if (!m.children.length) m.appendChild(h('div', 'quiet', `Type below, or say "${esc(wakeWord())}".`));
 }
 function setCompact(on, fromServer) {
-  if (EMBED) return;                                       // the island's window has its own size
+  if (EMBED) return;                                       // Clove Notch's window has its own size
   document.body.classList.toggle('compact', on);
   if (!fromServer) send({ type: 'window', mode: on ? 'compact' : 'expanded' });
   renderMini(); wake();
@@ -641,7 +641,7 @@ document.addEventListener('click', e => {
 $('to-compact').onclick = () => setCompact(true);
 $('to-full').onclick = () => setCompact(false);
 
-// Inside the island's window: it picks the page and says when the window is hidden (nothing is drawn then).
+// Inside Clove Notch's window: it picks the page and says when the window is hidden (nothing is drawn then).
 if (EMBED) {
   document.body.classList.add('embed');
   addEventListener('message', e => {

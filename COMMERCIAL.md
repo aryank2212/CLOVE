@@ -25,7 +25,7 @@ issue titled **"Commercial licence"** on this repository, or contact
 
 ## What a commercial licence does not cover
 
-- **The island** (`island/`) is MIT-licensed already, from Coucou; keep its copyright notice in what you ship.
+- **Clove Notch** (`notch/`) is MIT-licensed already, from Coucou; keep its copyright notice in what you ship.
 - **Third-party services**: Google Gemini, Anthropic Claude and other providers have their own terms, and you
   need your own keys and accounts for them.
 - **Third-party components** listed in [NOTICE.md](NOTICE.md) keep their own licences.

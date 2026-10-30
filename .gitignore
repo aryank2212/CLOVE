@@ -7,10 +7,10 @@
 __pycache__/
 *.pyc
 
-# Island build output
-island/node_modules/
-island/target/
-island/dist/
+# Clove Notch build output
+notch/node_modules/
+notch/target/
+notch/dist/
 
 # Runtime
 assistant/tasks/

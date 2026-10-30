@@ -108,18 +108,18 @@ dashboard._hypr = real_hypr
 launched = []
 real_which, real_popen = ui_mod.shutil.which, ui_mod.subprocess.Popen
 ui_mod.subprocess.Popen = lambda argv, **k: launched.append(argv)
-ui_mod.shutil.which = lambda name: {"clove-island": "/x/clove-island", "google-chrome": "/x/chrome"}.get(name)
+ui_mod.shutil.which = lambda name: {"clove-notch": "/x/clove-notch", "google-chrome": "/x/chrome"}.get(name)
 ui_mod.open_window("http://127.0.0.1:1/?t=abcdefghij")
-check("with the island installed, the window is its Assistant page", launched[-1] == ["/x/clove-island", "--page", "assistant"])
+check("with Clove Notch installed, the window is its Assistant page", launched[-1] == ["/x/clove-notch", "--page", "assistant"])
 ui_mod.open_window("http://127.0.0.1:1/?t=abcdefghij", compact=True)
 check("the compact companion stays a Chrome window", launched[-1][0] == "/x/chrome" and "--window-size=380,560" in launched[-1])
 ui_mod.shutil.which = lambda name: {"google-chrome": "/x/chrome"}.get(name)
 ui_mod.open_window("http://127.0.0.1:1/?t=abcdefghij")
-check("without the island: a Chrome app window", launched[-1][0] == "/x/chrome" and launched[-1][1].startswith("--app="))
+check("without Clove Notch: a Chrome app window", launched[-1][0] == "/x/chrome" and launched[-1][1].startswith("--app="))
 ui_mod.shutil.which, ui_mod.subprocess.Popen = real_which, real_popen
 check("reduce motion is a saved setting", "reduce" in dashboard.DEFAULT_PREFS)
 
-# ---- each response has one content type (WebKit, in the island's window, reads the first) ------------
+# ---- each response has one content type (WebKit, in Clove Notch's window, reads the first) ------------
 async def served():
     srv = ui_mod.UI(lambda m: None)
     await srv.start()

@@ -18,7 +18,7 @@ HELPER = config.ROOT / "helpers" / "screenshot_portal.py"
 LOOK_WIDTH, POINT_WIDTH = 1920, 1280          # text needs more pixels to be readable; pointing doesn't
 
 CONTEXT = ("This is a screenshot of {user}'s computer screen ({os}). CLOVE, the voice assistant, may show its own "
-           "window, or the CLOVE island at the top of the screen: ignore them unless asked about them.")
+           "window, or Clove Notch at the top of the screen: ignore them unless asked about them.")
 
 
 def _os() -> str:

@@ -33,7 +33,7 @@ journalctl --user -u clove        # why it did or didn't start
 scripts/install_autostart.sh --remove
 ```
 
-The CLOVE island starts at login on its own (its General page, "Open at login"). The Chrome extension loads
+Clove Notch starts at login on its own (its General page, "Open at login"). The Chrome extension loads
 whenever Chrome runs; CLOVE opens Chrome itself when it needs the browser.
 
 ## What it does
@@ -241,8 +241,8 @@ into `routines/*.md`) run on demand, headless, with Claude reading your Notion p
 
 ## Window: CLOVE
 
-One page (`ui/index.html`, `ui/clove.css`, `ui/clove.js`, fed by `dashboard.py`), shown inside the CLOVE island's
-window on its **Assistant** pages when the island is installed, else in a Chrome app window. It has the island's
+One page (`ui/index.html`, `ui/clove.css`, `ui/clove.js`, fed by `dashboard.py`), shown inside Clove Notch's
+window on its **Assistant** pages when Clove Notch is installed, else in a Chrome app window. It has Clove Notch's
 look (`docs/DESIGN.md`): a black sidebar, a graphite panel, and a band on top of each page where its colour glows.
 - **Sidebar**: Conversation, Activity, Systems, Preferences (Ctrl+1–4), the command palette (Ctrl+K), each
   connection from a real check (brain, Gemini API, Chrome extension, your machines, microphone), and CLOVE's state.
@@ -330,13 +330,13 @@ The agent gets `ask_user` (Clove asks you aloud and returns your answer), `tell_
 **Hotkeys** (Hyprland, in `~/.config/hypr/bindings.conf`):
 `bind = SUPER, D, exec, /path/to/clove/scripts/clove-ctl dictate` and `bind = SUPER, C, exec, /path/to/clove/scripts/clove-ctl wake`.
 
-## The CLOVE island (top of the screen)
+## Clove Notch (top of the screen)
 
-`~/Projects/clove-island` is a fork of Coucou rebranded as CLOVE (its own name, mark, icon and sounds; see
-`CLOVE-FORK.md` there). It runs as `clove-island` (app grid: **CLOVE**, starts at login) and is connected both ways:
-its chat asks CLOVE itself (over `~/.local/state/clove/ctl.sock`), and CLOVE shows its own work on the island as a
+`notch/` is a fork of Coucou rebranded as CLOVE (its own name, mark, icon and sounds; see
+`notch/CLOVE-FORK.md`). It runs as `clove-notch` (app grid: **CLOVE**, starts at login) and is connected both ways:
+its chat asks CLOVE itself (over `~/.local/state/clove/ctl.sock`), and CLOVE shows its own work on Clove Notch as a
 **CLOVE** pill: what you asked, each tool as it runs, the reply, finished jobs, and plans waiting for approval with
-**Allow / Deny** (`island.py`). If the island isn't running, CLOVE simply doesn't report there. The island's window
+**Allow / Deny** (`notch.py`). If Clove Notch isn't running, CLOVE simply doesn't report there. Clove Notch's window
 is also CLOVE's: its **Assistant** pages show this folder's `ui/` (it reads the address from
 `$XDG_RUNTIME_DIR/clove.url`), and offer to start the `clove` service when CLOVE isn't running.
 
@@ -355,7 +355,7 @@ is also CLOVE's: its **Assistant** pages show this folder's `ui/` (it reads the 
 | `learned.py` | instant commands Clove teaches himself |
 | `machines.py`, `cli_adapter.py` | commands/health/services on this PC and your machines; headless coding agents with fallback |
 | `deskctx.py`, `dictate.py`, `focus.py`, `guide.py`, `pair.py`, `phone.py` | focused-window context, dictation, focus mode, guided tours, pair mode, Telegram inbox |
-| `island.py` | CLOVE's own pill and approval cards on the CLOVE island |
+| `notch.py` | CLOVE's own pill and approval cards on Clove Notch |
 | `ctl.py`, `scripts/clove-ctl`, `clove_mcp.py` | control socket, its CLI for hotkeys, and Clove as an MCP server for coding agents |
 | `tools.py` | tool declarations, duplicate guard, approval gate, plan tracking |
 | `jobs.py` | background jobs: Claude runs, installs, GNOME extensions (GNOME only), Gemini text models |

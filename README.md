@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="island/branding/clove-icon.svg" width="88" alt="The CLOVE mark">
+<img src="notch/branding/clove-icon.svg" width="88" alt="The CLOVE mark">
 
 # CLOVE
 
@@ -30,22 +30,22 @@ something (installing, deleting, restarting, using sudo, sending or buying on a 
 - **Sees your screen** when you ask ("what's this error?"), and knows which project your terminal is in.
 - **Looks after your machines**: health checks, logs and restarts on this PC and on servers you add over SSH.
 - **Dictation**: speak, and it types into any app. Start a sentence with "Clove" to talk to it instead.
-- **The CLOVE island**: a small bar at the top of the screen showing what CLOVE and your coding agents are doing,
+- **Clove Notch**: a small bar at the top of the screen showing what CLOVE and your coding agents are doing,
   with Allow / Deny buttons for anything waiting for approval.
 - **Asks first.** A plan with steps appears for anything risky, and nothing happens until you approve it by
-  voice, in the window, or on the island. This is enforced by the program, not left to the AI.
+  voice, in the window, or on Clove Notch. This is enforced by the program, not left to the AI.
 
-![The island at the top of the screen](docs/images/island.png)
+![Clove Notch at the top of the screen](docs/images/notch.png)
 
 ## What you need
 
 | | |
 |---|---|
-| **Computer** | Linux with a graphical desktop. Tested on Arch Linux (Omarchy) with Hyprland on Wayland. The assistant should work on other distributions; the island is tested on Hyprland only. |
+| **Computer** | Linux with a graphical desktop. Tested on Arch Linux (Omarchy) with Hyprland on Wayland. The assistant should work on other distributions; Clove Notch is tested on Hyprland only. |
 | **Microphone and speakers** | Any; a headset works best. |
 | **An AI brain** | A free Google Gemini API key ([get one here](https://aistudio.google.com/apikey)), or an NVIDIA GPU with 8 GB for the fully local brain. |
 | **Chrome or Chromium** | For anything on the web. |
-| **To build the island** | Rust and Node.js (the installer tells you if they're missing). |
+| **To build Clove Notch** | Rust and Node.js (the installer tells you if they're missing). |
 
 ## Install
 
@@ -72,13 +72,13 @@ The installer can be run again at any time; it keeps your settings.
 |---|---|
 | Talk to CLOVE | Say "Clove", then your request. |
 | Stop it speaking | Press Esc, or click the mark. |
-| Open the CLOVE window | The app grid (**CLOVE**), or the island. |
-| Approve or reject a plan | Say yes or no, or press Approve / Reject in the window or on the island. |
+| Open the CLOVE window | The app grid (**CLOVE**), or Clove Notch. |
+| Approve or reject a plan | Say yes or no, or press Approve / Reject in the window or on Clove Notch. |
 | Dictate into any app | Say "start dictation"; "stop dictation" ends it. |
-| Fold or unfold the island | Ctrl+Alt+N |
+| Fold or unfold Clove Notch | Ctrl+Alt+N |
 | Open the command palette | Ctrl+K in the window |
 
-Every setting is in the window under **Preferences**, and in the island under **General** and **Shortcuts**.
+Every setting is in the window under **Preferences**, and in Clove Notch under **General** and **Shortcuts**.
 
 ## Privacy
 
@@ -95,8 +95,8 @@ Every setting is in the window under **Preferences**, and in the island under **
 
 ```bash
 assistant/scripts/install_autostart.sh --remove      # stop it starting at login
-rm -f ~/.local/bin/clove-island ~/.local/bin/clove-island-hook ~/.config/autostart/CLOVE.desktop
-rm -rf ~/.local/state/clove ~/.config/clove-island ~/.local/share/clove-island   # settings, logs, memory
+rm -f ~/.local/bin/clove-notch ~/.local/bin/clove-notch-hook ~/.config/autostart/CLOVE.desktop
+rm -rf ~/.local/state/clove ~/.config/clove-notch ~/.local/share/clove-notch   # settings, logs, memory
 ```
 Then delete the CLOVE folder. In Chrome, remove the **Clove & Rose Hands** extension.
 
@@ -108,15 +108,15 @@ CLOVE is dual-licensed:
   service is released under the same licence, with its source code.
 - **Commercial licence**: for products and services that can't follow the AGPL. See [COMMERCIAL.md](COMMERCIAL.md).
 
-The island (`island/`) is a fork of [Coucou](https://github.com/Louis-CFM/coucou) by Louis Raillé and stays under
-its [MIT licence](island/LICENSE). Coucou's name, character, icon and sounds belong to its author and are not part
+Clove Notch (`notch/`) is a fork of [Coucou](https://github.com/Louis-CFM/coucou) by Louis Raillé and stays under
+its [MIT licence](notch/LICENSE). Coucou's name, character, icon and sounds belong to its author and are not part
 of CLOVE, which uses its own. Third-party notices: [NOTICE.md](NOTICE.md).
 
 ## More
 
 - [The full guide](docs/GUIDE.md): every feature, the three brains, calls, routines, and the code map.
 - [Design](docs/DESIGN.md): the colours, type and shapes shared by every part of CLOVE.
-- [The island](island/README.md): what it is and how to build it.
+- [Clove Notch](notch/README.md): what it is and how to build it.
 - [Security](SECURITY.md) · [Changes](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
 **Status**: early access, 0.1.0. Tested on one setup (Arch Linux with Hyprland and an NVIDIA GPU). Please report

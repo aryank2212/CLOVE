@@ -58,7 +58,7 @@ async def command(a, line: str) -> str:
         a.user_said(arg, typed=True)
         await a.send_text(arg)
         return "ok"
-    if cmd == "chat":                            # the CLOVE island's chat (clove_chat.rs): answers as JSON
+    if cmd == "chat":                            # Clove Notch's chat (clove_chat.rs): answers as JSON
         return await chat(a, arg)
     if cmd == "agent_ask" and arg:               # an agent (via clove_mcp.py) needs his answer
         return await agent_ask(a, arg)
@@ -77,7 +77,7 @@ _chat = {"brain": None, "lock": None}
 
 
 async def chat(a, arg: str) -> str:
-    """One text question from the island: answered by a text-only copy of the Hybrid brain (same tools, memory
+    """One text question from Clove Notch: answered by a text-only copy of the Hybrid brain (same tools, memory
     and approval rules as by voice), shown in the command centre too. The reply is one JSON line."""
     import json
     try:
@@ -96,7 +96,7 @@ async def chat(a, arg: str) -> str:
             from brain_hybrid import HybridBrain
             from prompt import system_prompt
             b = HybridBrain(a)
-            b.system = system_prompt("hybrid") + ("\n\nThis question was TYPED into the CLOVE island chat at the top of "
+            b.system = system_prompt("hybrid") + ("\n\nThis question was TYPED into Clove Notch chat at the top of "
                                                   "his screen, not spoken: answer in short plain text.")
             _chat["brain"] = b
         b.out = []
@@ -106,7 +106,7 @@ async def chat(a, arg: str) -> str:
         try:
             await b._turn(text)
         except Exception as e:
-            log.exception("island chat failed")
+            log.exception("notch chat failed")
             return json.dumps({"error": f"CLOVE couldn't answer: {str(e)[:160]}"})
     return json.dumps({"text": " ".join(x for x in b.out if x).strip() or "Done."})
 
