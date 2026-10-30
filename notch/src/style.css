@@ -703,12 +703,12 @@ body {
 }
 
 .folder-dots {
-  width: 46%;
+  width: 64%;
   aspect-ratio: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  gap: 22%;
+  gap: 16%;
 }
 
 .folder-dots i {
@@ -792,12 +792,17 @@ body {
 }
 
 .pill .pill-logo {
-  margin-left: 12px;
-  width: 14px;
-  height: 14px;
+  margin-left: 9px;
+  width: 21px;
+  height: 21px;
   display: grid;
   place-items: center;
   color: #fff;
+}
+
+.pill .pill-logo svg {
+  width: 21px;
+  height: 21px;
 }
 
 .pill .mini {
