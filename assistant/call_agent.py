@@ -72,8 +72,10 @@ TOOLS = [types.Tool(function_declarations=[
 
 
 class CallAgent:
-    def __init__(self, a, mission: str, who: str, platform: str, audio: call_audio.CallAudio, attached: bool = False, scope: dict | None = None):
+    def __init__(self, a, mission: str, who: str, platform: str, audio: call_audio.CallAudio, attached: bool = False, scope: dict | None = None,
+                 phase=None):
         self.attached = attached
+        self.phase = phase                                # a phone call: returns "phase: ..." like the extension's call_state
         self.scope = scope or {}
         self.peak_heard = 0                               # loudest remote sound so far, for diagnosing 'I can't hear them'
         self.a, self.mission, self.who, self.platform, self.audio = a, mission.strip(), who.strip(), platform, audio
@@ -360,7 +362,7 @@ class CallAgent:
                       "states clearly what was NOT answered.]")
                 nudges += 1
                 await self.session.send_realtime_input(text=msg)
-            out = await bridge.call("call_state", timeout=8, **self.scope)
+            out = await (self.phase() if self.phase else bridge.call("call_state", timeout=8, **self.scope))
             gone = gone + 1 if ("phase: ended" in out or "phase: none" in out or out.startswith("error")) else 0
             if gone >= 2:                                          # they hung up (checked every 2 s)
                 self.end(self.summary or "The other person hung up."); return
@@ -449,6 +451,62 @@ class CallManager:
             mode, f"Starting the {platform} call" + (f" to {who}" if who else ""))
         return (what + ". You'll hear both sides live." +
                 (" You're on speakers, so I can't listen to you while the call is audible; wait for a pause to tell me something, or use headphones." if speakers else ""))
+
+    async def start_phone(self, call: dict, who: str, mission: str) -> str:
+        """Answer a ringing call on his phone (Bluetooth, cell_call.py) and let the agent handle it."""
+        if self.active:
+            return "a call is already in progress; end it first"
+        if not self.a.client:
+            return "error: calls need the Gemini key"
+        import cell_call
+        self.audio = cell_call.PhoneAudio(loop_to_speakers=True)
+        Recogniser.shared()
+        self.state = "starting"
+        self.task = asyncio.create_task(self._run_phone(call, who, mission))
+        return f"Answering {who}'s call on your phone. You'll hear both sides live."
+
+    async def _run_phone(self, call: dict, who: str, mission: str):
+        import cell_call
+        a, path = self.a, call["path"]
+        report = "The phone call could not be answered."
+        self.agent = None
+        self.scope = {"platform": "phone"}
+
+        async def phase() -> str:
+            st = await asyncio.to_thread(cell_call.state, path)
+            return "phase: in_call" if st in ("active", "held") else "phase: ended" if st in ("gone", "disconnected") \
+                else f"phase: {st}"
+        try:
+            await asyncio.to_thread(self.audio.setup)
+            if not await asyncio.to_thread(cell_call.answer, path):
+                report = await self._fail("The phone didn't let me answer the call."); return
+            self.state = "connecting"
+            for _ in range(20):
+                if "in_call" in await phase():
+                    break
+                await asyncio.sleep(0.5)
+            else:
+                report = await self._fail("The call never connected (the caller may have hung up)."); return
+            self.state = "in call"
+            self.agent = CallAgent(a, mission, who, "phone", self.audio, scope=self.scope, phase=phase)
+            await a.notify(f"[Phone call answered from {who}. I'm handling it; tell {config.USER_NAME} briefly.]")
+            report = await self.agent.run()
+            await asyncio.to_thread(cell_call.hangup, path)
+        except Exception as e:
+            log.exception("phone call failed")
+            report = await self._fail(f"The phone call failed: {str(e)[:150]}")
+        finally:
+            self.state = "idle"
+            if self.audio:
+                await asyncio.to_thread(self.audio.teardown)
+            ag = self.agent
+            text = "\n".join(f"{w}: {t}" for w, t in ag.transcript) if ag else ""
+            memory.save_job("call", f"Phone call from {who}", f"{report}\n\nNotes: {'; '.join(ag.notes) if ag else ''}"
+                            f"\n\nTranscript:\n{text or '(nothing was said)'}", "done" if ag else "failed")
+            self.last_report = report
+            log.info("phone call finished: %s", report[:300])
+            await a.notify(f"[Phone call finished - a system notification] {report} Tell {config.USER_NAME} how it went, "
+                           "in a few sentences with every important detail.")
 
     async def _fail(self, text: str) -> str:
         log.warning("call not started: %s", text)

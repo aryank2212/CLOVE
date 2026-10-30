@@ -1,8 +1,9 @@
-"""CLOVE picks up his WhatsApp calls (Preferences › "Answer my WhatsApp calls", off by default; he asked for it).
+"""CLOVE picks up his calls (Preferences › "Answer my calls", off by default; he asked for it).
 
-Every few seconds it looks at WhatsApp Web in Chrome. When a call is ringing there, the call agent (call_agent.py)
-answers it: it says it is CLOVE, his AI assistant, takes a message, and keeps talking for as long as the caller
-wants (it never hangs up on them first). Money, codes, private details and commitments are never handled on the
+Every few seconds it looks at WhatsApp Web in Chrome, and at his phone when it is connected to the PC over Bluetooth
+(cell_call.py: his normal cellular calls). When a call is ringing, the call agent (call_agent.py) answers it: it
+says it is CLOVE, his AI assistant, takes a message, and keeps talking for as long as the caller wants (it never
+hangs up on them first). Money, codes, private details and commitments are never handled on the
 call; they go back to him, as on every CLOVE call.
 
 When the call is over he gets the summary on Telegram from CLOVE's own bot (CLOVE_TELEGRAM_BOT_TOKEN), and hears
@@ -17,7 +18,7 @@ import config
 log = logging.getLogger("clove.call_watch")
 POLL_S = 3
 
-MISSION = """Someone is calling {owner} on WhatsApp and you are answering for him. Greet them warmly, say you are \
+MISSION = """Someone is calling {owner} on {where} and you are answering for him. Greet them warmly, say you are \
 CLOVE, {owner}'s AI assistant, and that he can't take the call right now. Find out who is calling (if you don't \
 know) and what it's about, and offer to pass a message on. Note their name, the reason, anything urgent, and when \
 and how they'd like {owner} to get back to them.
@@ -48,6 +49,19 @@ class CallWatch:
         a = self.a
         if not self.on() or a.calls.active or time.monotonic() - self.answered_at < 20:
             return
+        import cell_call
+        ring = await asyncio.to_thread(cell_call.ringing)
+        if ring:
+            who = ring["name"] or ring["number"] or "an unknown number"
+            log.info("incoming phone call from %s: answering", who)
+            self.answered_at = time.monotonic()
+            owner = config.USER_NAME or "the owner"
+            started = await a.calls.start_phone(ring, who, MISSION.format(owner=owner, where="his phone"))
+            if started.startswith("error") or "already in progress" in started:
+                log.warning("could not answer the phone call: %s", started)
+                return
+            asyncio.create_task(self._after(who, "phone"))
+            return
         from browser_bridge import bridge
         if not bridge.connected:
             return
@@ -59,11 +73,12 @@ class CallWatch:
         log.info("incoming WhatsApp call from %s: answering", who or "an unknown caller")
         self.answered_at = time.monotonic()
         owner = config.USER_NAME or "the owner"
-        started = await a.calls.start("whatsapp", who or "the caller", MISSION.format(owner=owner), incoming=True)
+        started = await a.calls.start("whatsapp", who or "the caller", MISSION.format(owner=owner, where="WhatsApp"),
+                                      incoming=True)
         if started.startswith("error") or "already in progress" in started:
             log.warning("could not answer the call: %s", started)
             return
-        asyncio.create_task(self._after(who))
+        asyncio.create_task(self._after(who, "WhatsApp"))
 
     def caller(self) -> str:
         """Who is calling: the newest WhatsApp notification of the last half minute (WhatsApp Web names the caller)."""
@@ -78,13 +93,14 @@ class CallWatch:
                 return n.title
         return ""
 
-    async def _after(self, who: str):
+    async def _after(self, who: str, where: str = "WhatsApp"):
         """Wait for the call to end, then send him the summary on Telegram."""
         calls = self.a.calls
         while calls.task is not None and not calls.task.done():
             await asyncio.sleep(2)
         report = getattr(calls, "last_report", "") or "The call ended."
-        text = f"📞 CLOVE answered a WhatsApp call from {who or 'someone'}.\n\n{report}"
+        what = "a phone call" if where == "phone" else "a WhatsApp call"
+        text = f"📞 CLOVE answered {what} from {who or 'someone'}.\n\n{report}"
         token = config.CLOVE_TELEGRAM_BOT_TOKEN
         if not (token and config.TELEGRAM_CHAT_ID):
             log.info("call summary not sent to Telegram: CLOVE has no bot of its own (CLOVE_TELEGRAM_BOT_TOKEN)")
