@@ -22,32 +22,46 @@ def check(name, ok):
 
 
 def objects(*calls):
-    data = {"/org/pipewire/Telephony/ag0": {"org.ofono.Modem": {"Online": {"type": "b", "data": True}}}}
+    """{gateway: GetCalls json}, as the phone's line answers."""
+    data = {}
     for i, (st, num, name) in enumerate(calls):
-        data[f"/org/pipewire/Telephony/ag0/call{i}"] = {"org.ofono.VoiceCall": {
+        data[f"/org/pipewire/Telephony/ag1/call{i}"] = {
             "State": {"type": "s", "data": st}, "LineIdentification": {"type": "s", "data": num},
-            "Name": {"type": "s", "data": name}}}
-    return json.dumps({"type": "a{oa{sa{sv}}}", "data": [data]})
+            "Name": {"type": "s", "data": name}}
+    return {"/org/pipewire/Telephony/ag1": json.dumps({"type": "a{oa{sv}}", "data": [data]})}
+
+
+ROOT_REAL = json.dumps({"type": "a{oa{sa{sv}}}", "data": [{"/org/pipewire/Telephony/ag1": {
+    "org.pipewire.Telephony.AudioGateway1": {"Address": {"type": "s", "data": "AC:00:7A:F2:F0:6C"}},
+    "org.pipewire.Telephony.AudioGatewayTransport1": {"State": {"type": "s", "data": "idle"}}}}]})
+check("the connected phone's line is found (as on this PC)", cell_call.gateways(ROOT_REAL) == ["/org/pipewire/Telephony/ag1"])
+check("a call's phone address", cell_call.address_of("/org/pipewire/Telephony/ag1/call0", ROOT_REAL) == "AC:00:7A:F2:F0:6C")
+check("no phone: no lines", cell_call.gateways(json.dumps({"type": "a{oa{sa{sv}}}", "data": [{}]})) == [])
 
 
 # ---- reading the bus ------------------------------------------------------------------------------------
-check("no phone connected: no calls", cell_call.calls(json.dumps({"type": "a{oa{sa{sv}}}", "data": [{}]})) == [])
-check("garbage: no calls, no crash", cell_call.calls("not json") == [])
+check("a line with no calls: no calls", cell_call.calls({"/ag1": json.dumps({"type": "a{oa{sv}}", "data": [{}]})}) == [])
+check("garbage: no calls, no crash", cell_call.calls({"/ag1": "not json"}) == [])
 raw = objects(("active", "+911234", "Mum"), ("incoming", "+919876", ""))
 check("each call with its state and number", [c["state"] for c in cell_call.calls(raw)] == ["active", "incoming"])
 r = cell_call.ringing(raw)
 check("the ringing one is found (not the call he is on)", r and r["number"] == "+919876")
 check("no ringing call: None", cell_call.ringing(objects(("active", "+911234", "Mum"))) is None)
-check("a call's state", cell_call.state("/org/pipewire/Telephony/ag0/call0", raw) == "active")
-check("a dropped call is gone", cell_call.state("/org/pipewire/Telephony/ag0/call9", raw) == "gone")
+check("a call's state", cell_call.state("/org/pipewire/Telephony/ag1/call0", raw) == "active")
+check("a dropped call is gone", cell_call.state("/org/pipewire/Telephony/ag1/call9", raw) == "gone")
 
 # ---- the audio: the Bluetooth call joined to the agent's two devices -------------------------------------
 loaded = []
 cell_call._pactl = lambda *a: (loaded.append(a), str(len(loaded)))[1] if a[0] == "load-module" else ""
-cell_call._json = lambda *a: ([{"name": "bluez_input.F4_43_D0_34_1E_EE.0"}, {"name": "alsa_input.mic"}] if a[1] == "sources"
-                              else [{"name": "bluez_output.F4_43_D0_34_1E_EE.1"}, {"name": "alsa_output.speakers"}])
+cell_call._json = lambda *a: ([{"name": "bluez_input.08_E4_DF_2B_BE_75.0"}, {"name": "bluez_input.F4_43_D0_34_1E_EE.0"},
+                               {"name": "alsa_input.mic"}] if a[1] == "sources"
+                              else [{"name": "bluez_output.08_E4_DF_2B_BE_75.1"}, {"name": "bluez_output.F4_43_D0_34_1E_EE.1"},
+                                    {"name": "alsa_output.speakers"}])
+check("the phone's own call audio, not the earbuds'", cell_call.bluetooth_nodes("F4:43:D0:34:1E:EE")
+      == ("bluez_input.F4_43_D0_34_1E_EE.0", "bluez_output.F4_43_D0_34_1E_EE.1"))
 cell_call.CallAudio.teardown_leftovers = staticmethod(lambda: None)
 pa = cell_call.PhoneAudio(loop_to_speakers=True)
+pa.address = "F4:43:D0:34:1E:EE"
 pa.setup()
 flat = [" ".join(a) for a in loaded]
 check("the caller's voice goes to the agent", any("source=bluez_input.F4_43_D0_34_1E_EE.0 sink=clove_from_call" in f for f in flat))

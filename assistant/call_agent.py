@@ -477,7 +477,6 @@ class CallManager:
             return "phase: in_call" if st in ("active", "held") else "phase: ended" if st in ("gone", "disconnected") \
                 else f"phase: {st}"
         try:
-            await asyncio.to_thread(self.audio.setup)
             if not await asyncio.to_thread(cell_call.answer, path):
                 report = await self._fail("The phone didn't let me answer the call."); return
             self.state = "connecting"
@@ -487,6 +486,12 @@ class CallManager:
                 await asyncio.sleep(0.5)
             else:
                 report = await self._fail("The call never connected (the caller may have hung up)."); return
+            self.audio.address = await asyncio.to_thread(cell_call.address_of, path)
+            for _ in range(20):                                   # the call's Bluetooth audio appears once it is live
+                if all(await asyncio.to_thread(cell_call.bluetooth_nodes, self.audio.address)):
+                    break
+                await asyncio.sleep(0.25)
+            await asyncio.to_thread(self.audio.setup)
             self.state = "in call"
             self.agent = CallAgent(a, mission, who, "phone", self.audio, scope=self.scope, phase=phase)
             await a.notify(f"[Phone call answered from {who}. I'm handling it; tell {config.USER_NAME} briefly.]")

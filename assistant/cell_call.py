@@ -17,6 +17,8 @@ from call_audio import FROM_CALL, TO_CALL, CallAudio, _json, _pactl
 log = logging.getLogger("clove.cell")
 SERVICE, ROOT = "org.pipewire.Telephony", "/org/pipewire/Telephony"
 CALL = "org.ofono.VoiceCall"
+CALL_NATIVE = "org.pipewire.Telephony.Call1"
+GATEWAY = "org.pipewire.Telephony.AudioGateway1"
 
 
 def _busctl(*args: str, timeout: float = 6) -> str:
@@ -30,54 +32,82 @@ def _value(v):
     return v.get("data") if isinstance(v, dict) and "data" in v else v
 
 
-def calls(raw: str | None = None) -> list[dict]:
-    """Every call the phone has now: [{path, state, number, name}]. State: incoming, waiting, dialing, alerting,
-    active, held, disconnected."""
+def _data(raw: str):
+    try:
+        return json.loads(raw)["data"][0]
+    except (ValueError, KeyError, IndexError, TypeError):
+        return {}
+
+
+def gateways(raw: str | None = None) -> list[str]:
+    """The phones connected now (one "audio gateway" each)."""
     raw = raw if raw is not None else _busctl("call", SERVICE, ROOT, "org.freedesktop.DBus.ObjectManager",
                                               "GetManagedObjects", "--json=short")
-    try:
-        objects = json.loads(raw)["data"][0]
-    except (ValueError, KeyError, IndexError, TypeError):
-        return []
+    return [path for path, ifaces in _data(raw).items() if GATEWAY in ifaces or "org.ofono.VoiceCallManager" in ifaces]
+
+
+def calls(raw: dict[str, str] | None = None) -> list[dict]:
+    """Every call the connected phones have now: [{path, state, number, name}]. State: incoming, waiting, dialing,
+    alerting, active, held, disconnected. raw: {gateway path: GetCalls json} (tests)."""
+    if raw is None:
+        raw = {gw: _busctl("call", SERVICE, gw, "org.ofono.VoiceCallManager", "GetCalls", "--json=short")
+               for gw in gateways()}
     out = []
-    for path, ifaces in objects.items():
-        props = ifaces.get(CALL)
-        if props is None:
-            continue
-        p = {k: _value(v) for k, v in props.items()}
-        out.append({"path": path, "state": str(p.get("State", "")), "number": str(p.get("LineIdentification", "")),
-                    "name": str(p.get("Name", ""))})
+    for text in raw.values():
+        for path, props in _data(text).items():
+            p = {k: _value(v) for k, v in props.items()}
+            out.append({"path": path, "state": str(p.get("State", "")),
+                        "number": str(p.get("LineIdentification", "")), "name": str(p.get("Name", ""))})
     return out
 
 
-def ringing(raw: str | None = None) -> dict | None:
+def ringing(raw: dict[str, str] | None = None) -> dict | None:
     return next((c for c in calls(raw) if c["state"] == "incoming"), None)
 
 
-def state(path: str, raw: str | None = None) -> str:
+def state(path: str, raw: dict[str, str] | None = None) -> str:
     """The call's state, or "gone" once the phone dropped it."""
     return next((c["state"] for c in calls(raw) if c["path"] == path), "gone")
 
 
+def _call_method(path: str, method: str) -> bool:
+    """The oFono interface first, PipeWire's own if that one isn't there."""
+    err = ""
+    for iface in (CALL, CALL_NATIVE):
+        r = subprocess.run(["busctl", "--user", "call", SERVICE, path, iface, method], capture_output=True, text=True,
+                           timeout=8)
+        if r.returncode == 0:
+            return True
+        err = r.stderr.strip()[:160]
+    log.warning("could not %s %s: %s", method.lower(), path, err)
+    return False
+
+
 def answer(path: str) -> bool:
-    r = subprocess.run(["busctl", "--user", "call", SERVICE, path, CALL, "Answer"], capture_output=True, text=True,
-                       timeout=8)
-    if r.returncode != 0:
-        log.warning("could not answer %s: %s", path, r.stderr.strip()[:160])
-    return r.returncode == 0
+    return _call_method(path, "Answer")
 
 
 def hangup(path: str) -> bool:
-    r = subprocess.run(["busctl", "--user", "call", SERVICE, path, CALL, "Hangup"], capture_output=True, text=True,
-                       timeout=8)
-    return r.returncode == 0
+    return _call_method(path, "Hangup")
 
 
-def bluetooth_nodes() -> tuple[str, str]:
-    """(source, sink) of the phone's call audio: the Bluetooth hands-free devices PipeWire made for it."""
-    src = next((s["name"] for s in _json("list", "sources")
-                if s["name"].startswith("bluez_input.") and not s["name"].endswith(".monitor")), "")
-    sink = next((s["name"] for s in _json("list", "sinks") if s["name"].startswith("bluez_output.")), "")
+def address_of(call_path: str, raw: str | None = None) -> str:
+    """The Bluetooth address of the phone a call belongs to (its gateway is the call path's parent)."""
+    gateway = call_path.rsplit("/", 1)[0]
+    raw = raw if raw is not None else _busctl("call", SERVICE, ROOT, "org.freedesktop.DBus.ObjectManager",
+                                              "GetManagedObjects", "--json=short")
+    props = _data(raw).get(gateway, {}).get(GATEWAY, {})
+    return str(_value(props.get("Address", "")) or "")
+
+
+def bluetooth_nodes(address: str = "") -> tuple[str, str]:
+    """(source, sink) of the phone's call audio: the Bluetooth hands-free devices PipeWire made for it. With the
+    phone's address, only its own (never earbuds that are connected too)."""
+    tag = address.replace(":", "_").upper()
+    mine = (lambda n: tag in n.upper()) if tag else (lambda n: True)
+    src = next((s["name"] for s in _json("list", "sources") if s["name"].startswith("bluez_input.")
+                and not s["name"].endswith(".monitor") and mine(s["name"])), "")
+    sink = next((s["name"] for s in _json("list", "sinks") if s["name"].startswith("bluez_output.") and mine(s["name"])), "")
     return src, sink
 
 
@@ -88,9 +118,11 @@ class PhoneAudio(CallAudio):
         clove_to_call's monitor (the agent's voice)  ->  the Bluetooth sink  (the caller hears it)
         and both looped to his speakers, as for Chrome calls."""
 
+    address = ""                                  # the phone's Bluetooth address, set before setup
+
     def setup(self, attach: bool = False):
         self.teardown_leftovers()
-        src, sink = bluetooth_nodes()
+        src, sink = bluetooth_nodes(self.address)
         if not src or not sink:
             raise RuntimeError("the phone's call audio isn't on this PC (is the phone connected over Bluetooth?)")
         for args in (
