@@ -18,3 +18,13 @@ the old folder).
 
 **Done when.** After a reboot CLOVE and Clove Notch start from this repository, "Clove, what time is it?" is
 answered, and the old folders are no longer used by anything (`lsof`, the service file and the desktop entries).
+
+## Progress
+
+- [x] Personal routines load from `assistant/routines/local/` (git ignores it); the three are copied there.
+- [x] `assistant/.venv` copied from the old folder (same packages); `notch/` built from this repository.
+- [x] Clove Notch's settings and WebKit data are already under the new names, with links at the old paths.
+- [ ] `assistant/.env` copied from the old folder (by the owner: it holds the keys).
+- [ ] Switch over: stop the old notch and service, install `clove-notch`, rename the desktop entries, point
+      `clove.service` here, start both, ask CLOVE a question, check the Claude Code status line.
+- [ ] Archive the old folders after a week.
