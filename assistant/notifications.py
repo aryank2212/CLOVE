@@ -25,6 +25,8 @@ MATCH = "type=method_call,interface=org.freedesktop.Notifications,member=Notify"
 BATCH_S = 2.5                       # notifications arriving together are announced together
 REPEAT_S = 120                      # the same message twice within this is announced once
 KEEP = 50
+# One notification is one JSON line; a sender's photo (the image-data hint) makes it several MB.
+LINE_LIMIT = 64 << 20
 
 # Where a notification comes from, by the app's name, its desktop entry, or the site in a browser notification.
 PLATFORMS = [
@@ -125,11 +127,19 @@ class Notifications:
         proc = await asyncio.create_subprocess_exec(
             "busctl", "--user", "monitor", "--json=short", "--match", MATCH,
             stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-            limit=1 << 20)
+            limit=LINE_LIMIT)
         self.running = True
         log.info("watching notifications")
         try:
-            while line := await proc.stdout.readline():
+            while True:
+                try:
+                    line = await proc.stdout.readuntil(b"\n")
+                except asyncio.IncompleteReadError:
+                    break                                 # busctl ended
+                except asyncio.LimitOverrunError as e:   # bigger than any real one: skip it, keep watching
+                    log.warning("skipped an oversized notification (%d bytes)", e.consumed)
+                    await self._skip_line(proc.stdout)
+                    continue
                 try:
                     msg = json.loads(line)
                 except ValueError:
@@ -142,6 +152,17 @@ class Notifications:
             if proc.returncode is None:
                 proc.kill()
                 await proc.wait()
+
+    @staticmethod
+    async def _skip_line(reader: asyncio.StreamReader):
+        while True:
+            try:
+                await reader.readuntil(b"\n")
+                return
+            except asyncio.LimitOverrunError as e:
+                await reader.readexactly(e.consumed)
+            except asyncio.IncompleteReadError:
+                return
 
     @staticmethod
     def _sender_pid(msg: dict) -> int:
