@@ -73,20 +73,19 @@ async def main():
     sends = [c for c in calls if c[0] == "wa_send"]
     check("the reply goes to WhatsApp", len(sends) == 1 and "CLOVE" in sends[0][1]["text"])
     check("after opening the sender's own chat", calls[0] == ("wa_chat", {"name": "Priya"}))
-    check("he is told who wrote and what was answered", told and "Priya" in told[-1] and "You replied" in told[-1])
-    check("and not asked whether to reply", "Don't ask whether to reply" in told[-1])
+    check("not read out: the notch shows it instead", not told)
 
     w.seen_note(note("Priya", "ok and tomorrow?"))
     await asyncio.sleep(0.3)
     check("the same person again soon: no second automatic reply", len([c for c in calls if c[0] == "wa_send"]) == 1)
-    check("he is asked about that one instead", "ok and tomorrow?" in told[-1] and "like you to reply" in told[-1])
+    check("he gets a heads-up about that one instead", "ok and tomorrow?" in told[-1] and "heads-up" in told[-1])
 
     # ---- skipped and failed replies fall back to asking him -----------------------------------------
     drafts["text"] = None                                   # the model said SKIP (a code, money, a company...)
     w.seen_note(note("HDFC Bank", "Your OTP is 482913"))
     await asyncio.sleep(0.3)
     check("a skipped message is not answered", len([c for c in calls if c[0] == "wa_send"]) == 1)
-    check("he is asked about it as usual", "482913" in told[-1] and "like you to reply" in told[-1])
+    check("he gets the usual heads-up", "482913" in told[-1] and "heads-up" in told[-1])
 
     drafts["text"] = "Hi, this is CLOVE."
     opened["name"] = "Mum (2)"                              # WhatsApp opened a different chat

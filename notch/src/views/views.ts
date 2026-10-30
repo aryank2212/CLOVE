@@ -47,6 +47,8 @@ export interface ViewActions {
   tellClove(text: string): void;
   /** CLOVE fork: the header's mic button: CLOVE stops or starts listening. */
   toggleCloveMic(): void;
+  /** CLOVE fork: what the bottom bar's buttons did, now in the header: dictate, note (record a call), hub. */
+  flowAction(action: "dictate" | "note" | "hub"): void;
   decide(d: "allow" | "deny"): void;
   /** Answers the question Claude Code asked: question text → chosen label. */
   answer(answers: Record<string, string | string[]>): void;
@@ -127,6 +129,9 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const soundBtn = h("button", { title: tl("Mute"), onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
   // CLOVE fork: CLOVE's microphone (hidden while CLOVE isn't running).
   const micBtn = h("button", { class: "clove-mic", onclick: () => actions.toggleCloveMic() }, svg(ICONS.micOn, 14));
+  const dictateBtn = h("button", { title: tl("Dictate"), onclick: () => actions.flowAction("dictate") }, svg(ICONS.dictate, 14, { stroke: 2 }));
+  const recordBtn = h("button", { class: "clove-rec", title: tl("Record a call"), onclick: () => actions.flowAction("note") }, svg(ICONS.recordCall, 14, { stroke: 1.8 }));
+  const openBtn = h("button", { title: tl("Open CLOVE"), onclick: () => actions.flowAction("hub") }, svg(ICONS.cloveWindow, 14, { stroke: 1.8 }));
   // Plan usage pills (off by default): before the gear, Claude first, as on the Mac.
   const claudePill = buildPlanPill(false);
   const codexPill = buildPlanPill(true);
@@ -142,7 +147,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
     "div",
     { id: "header" },
     h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
-    h("div", { class: "header-actions" }, planPills, micBtn, gearBtn, soundBtn),
+    h("div", { class: "header-actions" }, planPills, dictateBtn, recordBtn, openBtn, micBtn, gearBtn, soundBtn),
   );
   const headerActions = el.lastElementChild as HTMLElement;
 

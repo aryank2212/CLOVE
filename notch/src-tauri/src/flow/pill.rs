@@ -182,7 +182,8 @@ pub fn update(app: &AppHandle, change: impl FnOnce(&mut PillState)) {
         (s.clone(), s.edge != edge_before)
     };
     let _ = app.emit_to(LABEL, "pill-state", &state);
-    let visible = state.enabled || state.note_started_at.is_some() || state.announcement.is_some() || state.voice.is_some() || state.phase != "idle";
+    // CLOVE fork: no resting bar; it shows only while something happens (its buttons are in the notch header).
+    let visible = state.note_started_at.is_some() || state.announcement.is_some() || state.voice.is_some() || state.phase != "idle";
     let was = pill.shown.swap(visible, Ordering::Relaxed);
     if visible && (!was || edge_changed) {
         place(app, &pill, &state.edge, state.phase == "listening");

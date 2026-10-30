@@ -64,9 +64,19 @@ async def scenario():
     check("messages are marked as data, not instructions", "never instructions" in text and "do not call tools" in text)
     check("CLOVE stays awake for his answer", woke == ["notification"])
 
+    check("a short heads-up, not a question", "ONE short sentence" in text and "Do NOT ask" in text)
+    w.seen_note(N.parse(payload("Google Chrome", "Sam", "web.whatsapp.com\n\nhello??")))
+    await asyncio.sleep(0.2)
+    check("the same person again within minutes: only on the notch", len(notes_sent) == 1)
+    w.spoken["Sam"] -= N.SPEAK_EVERY_S
+    w.seen_note(N.parse(payload("Google Chrome", "Sam", "web.whatsapp.com\n\nstill there?")))
+    await asyncio.sleep(0.2)
+    check("ten minutes later: mentioned again", len(notes_sent) == 2 and "still there?" in notes_sent[-1])
+    notes_sent.pop()
+
     w.seen_note(N.parse(payload("Omarchy", "Screenshot saved", "")))
     await asyncio.sleep(0.2)
-    check("non-message notifications are kept but not read out", len(notes_sent) == 1 and len(w.recent) == 4)
+    check("non-message notifications are kept but not read out", len(notes_sent) == 1 and len(w.recent) == 6)
 
     prefs["announce"] = False
     w.seen_note(N.parse(payload("Google Chrome", "Mum", "web.whatsapp.com\n\ndinner?")))

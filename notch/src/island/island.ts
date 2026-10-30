@@ -10,6 +10,7 @@ import {
   QUESTION_PICKER_H,
   type BotEmoteName, type IslandMode, type IslandViewName,
 } from "../core/layout";
+import { FlowBridge } from "../core/flow";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
@@ -186,6 +187,7 @@ export class Island {
       },
       // The ↗ button — same targets as openAgentTarget() on macOS.
       tellClove: (text: string) => void Bridge.cloveTell(text),
+      flowAction: (action) => void FlowBridge.pillAction(action),
       toggleCloveMic: () => {
         void Bridge.cloveMute("toggle").then((muted) => {
           State.cloveMuted = muted;
