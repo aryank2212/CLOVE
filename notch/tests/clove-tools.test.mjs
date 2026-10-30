@@ -81,3 +81,17 @@ test("day and night: noon UTC is day in London and night in Tokyo... and the sun
   assert.ok(isDay(51.5, -0.1, sun));
   assert.ok(!isDay(-35, 140, sun));
 });
+
+test("a click on the map picks the nearest city; a city clock can be changed and cycled", async () => {
+  const { nearestCity } = await import("../src/core/tools.ts");
+  assert.equal(nearestCity(35, 139).name, "Tokyo");
+  assert.equal(nearestCity(48, 3).name, "Paris");
+  assert.equal(nearestCity(-34, -58).name, "Buenos Aires");
+  const before = Tools.cities[3].name;
+  Tools.setCity(3, nearestCity(1, 104));
+  assert.equal(Tools.cities[3].name, "Singapore");
+  Tools.cycleCity(3, 1);
+  assert.notEqual(Tools.cities[3].name, "Singapore");
+  Tools.setCity(3, nearestCity(37.8, -122.4));
+  assert.equal(Tools.cities[3].name, before);
+});

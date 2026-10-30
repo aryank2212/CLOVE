@@ -15,16 +15,18 @@ import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { Tools, clockText, type LiveActivity } from "../core/tools";
 import { t } from "../i18n/i18n";
+import { APP_LOGOS } from "../views/logos";
+import { ICONS } from "../views/icons";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
-import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
+import { pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
 import { SeasonCache, parseOutfit } from "../mochi/wardrobe";
 import { UploadCanvas } from "../upload/canvas";
 import { USC, UploadSeq } from "../upload/sequence";
 import { closePlanCard, openPlanColor, planCardOpen } from "../views/usage";
 import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
-import { h } from "../views/dom";
+import { h, svg } from "../views/dom";
 import { IslandStateMachine } from "./fsm";
 import { refreshHookPills } from "./integrations";
 import { DesktopLink } from "./desktop";
@@ -1256,18 +1258,7 @@ export class Island {
     // Compact mini grid
     const showGrid = State.mode === "compact";
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
-    if (showGrid) {
-      const others = State.otherTasks.slice(0, 4);
-      const key = others.map((t) => t.id).join("|");
-      if (this.miniGrid.dataset.key !== key) {
-        this.miniGrid.dataset.key = key;
-        this.miniGrid.replaceChildren();
-        for (const t of others) {
-          this.miniGrid.append(createMiniBot(t, 13));
-        }
-        pruneMiniBots();
-      }
-    }
+    if (showGrid) this.syncCompactStatus();
 
     this.updateClock();
 
@@ -1298,6 +1289,34 @@ export class Island {
     if (this.clockEl.textContent !== text) this.clockEl.textContent = text;
   }
 
+  /**
+   * CLOVE fork: the compact notch's right side, in place of the four little mascots: the app with unread
+   * messages (its logo and how many), else CLOVE muted (a red mic), else CLOVE listening (three breathing bars).
+   */
+  private syncCompactStatus() {
+    const unread = Object.entries(State.cloveUnread).filter(([, n]) => n > 0);
+    const newest = [...State.cloveLog].reverse().find((x) => x.kind === "message" && (State.cloveUnread[x.app] ?? 0) > 0);
+    const app = newest?.app ?? unread[0]?.[0];
+    const total = unread.reduce((n, [, c]) => n + c, 0);
+    const key = app ? `unread~${app}~${total}` : State.cloveMuted === true ? "muted" : State.cloveMuted === false ? "listening" : "idle";
+    if (this.miniGrid.dataset.key === key) return;
+    this.miniGrid.dataset.key = key;
+    this.miniGrid.className = `status status-${key.split("~")[0]}`;
+    this.miniGrid.replaceChildren();
+    pruneMiniBots();
+    if (app) {
+      const logo = APP_LOGOS[app];
+      this.miniGrid.append(logo ? svg(logo, 15) : h("b", { text: app.slice(0, 1) }),
+        h("span", { class: "status-count", text: total > 9 ? "9+" : String(total) }));
+    } else if (key === "muted") {
+      this.miniGrid.append(svg(ICONS.micOff, 15));
+    } else if (key === "listening") {
+      const bars = h("span", { class: "status-bars" });
+      for (let i = 0; i < 3; i++) bars.append(h("i"));
+      this.miniGrid.append(bars);
+    }
+  }
+
   /** CLOVE fork: the compact notch's live activity: a mark (pulsing dot, bars, hourglass) and its text. */
   private showLive(live: NonNullable<LiveActivity>) {
     const now = Date.now();
@@ -1305,7 +1324,7 @@ export class Island {
     let text: string;
     switch (live.kind) {
       case "ringing":
-        mark = "ring";
+        mark = live.label ? "ring-alarm" : "ring-timer";
         text = live.label ? t("Alarm {0}", { 0: live.label }) : t("Timer done");
         break;
       case "recording":
@@ -1333,11 +1352,25 @@ export class Island {
     if (el.dataset.live !== mark) {
       el.dataset.live = mark;
       el.className = `live live-${mark}`;
+      const ringing = mark.startsWith("ring");
       const m = h("span", { class: "live-mark" });
       if (mark === "music") for (let i = 0; i < 4; i++) m.append(h("i"));
-      el.replaceChildren(m, h("span", { class: "live-text" }));
+      if (ringing) m.append(svg(mark === "ring-alarm" ? ICONS.bell : ICONS.hourglass, 13, { stroke: 2 }));
+      const textEl = h("span", { class: "live-text" });
+      if (ringing) {
+        // A ringing timer or alarm stops right here, without opening Clove Notch.
+        const stop = h("button", { class: "live-stop", text: t("Stop") });
+        stop.addEventListener("click", (e) => {
+          e.stopPropagation();
+          Tools.stopRinging();
+        });
+        stop.addEventListener("pointerdown", (e) => e.stopPropagation());
+        el.replaceChildren(m, textEl, stop);
+      } else {
+        el.replaceChildren(m, textEl);
+      }
     }
-    const span = el.lastElementChild as HTMLElement;
+    const span = el.querySelector(".live-text") as HTMLElement;
     if (span.textContent !== text) span.textContent = text;
   }
 

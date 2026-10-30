@@ -164,6 +164,24 @@ fn chrono_stamp() -> String {
     secs.to_string()
 }
 
+/// Opens an https link in Chrome (Chromium if that's what is here), else the default browser.
+#[tauri::command]
+pub async fn open_in_chrome(url: String) -> bool {
+    if !url.starts_with("https://") || url.len() > 2048 {
+        return false;
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        for browser in ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"] {
+            if has(browser) && spawn(std::path::Path::new(browser), &[url.as_str()]) {
+                return true;
+            }
+        }
+        spawn(std::path::Path::new("xdg-open"), &[url.as_str()])
+    })
+    .await
+    .unwrap_or(false)
+}
+
 // ── Music: whatever MPRIS player is playing ────────────────────────────────────
 
 #[derive(Serialize, Default, Clone)]

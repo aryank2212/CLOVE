@@ -3283,8 +3283,8 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
 
 .mp-art {
   flex: none;
-  width: 78px;
-  height: 78px;
+  width: 68px;
+  height: 68px;
   border-radius: 14px;
   overflow: hidden;
   background: linear-gradient(145deg, #23262c, #121316);
@@ -3341,10 +3341,10 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
 }
 
 .mp-controls {
-  margin-top: auto;
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .mp-btn {
@@ -3385,6 +3385,8 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
 }
 
 .mp-progress {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3866,16 +3868,6 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
   animation: live-blink 2s ease-in-out infinite;
 }
 
-.live-ring {
-  color: #ffb454 !important;
-  animation: live-blink 0.9s ease-in-out infinite;
-}
-
-.live-ring .live-mark {
-  background: #ffb454;
-  box-shadow: 0 0 10px #ffb454;
-}
-
 .live-music .live-mark {
   width: 12px;
   height: 10px;
@@ -3903,4 +3895,265 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
 
 @keyframes live-blink {
   50% { opacity: 0.35; }
+}
+
+/* ── CLOVE fork: player bottom row, Apple Music, calendar picks, map picks, compact status ── */
+.mp-top {
+  align-items: flex-start;
+}
+
+.mp-text {
+  padding-top: 2px;
+}
+
+.mp-bottom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mp-open {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  cursor: default;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.mp-open:hover {
+  background: linear-gradient(135deg, #fa2d48, #fc5c7d);
+  border-color: transparent;
+  color: #fff;
+}
+
+.mp-open:active {
+  transform: scale(0.92);
+}
+
+.empty .mp-bar {
+  opacity: 0.4;
+}
+
+.cal-weekday.other {
+  color: var(--ink);
+}
+
+.cal-rel {
+  font: 600 10.5px var(--font);
+  color: #ffb454;
+  margin-top: 2px;
+}
+
+.cal-head {
+  gap: 4px;
+}
+
+.cal-title {
+  flex: 1;
+  text-align: center;
+}
+
+.cal-todaybtn {
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(255, 69, 58, 0.18);
+  color: #ff6961;
+  font: 700 8.5px var(--font);
+  cursor: default;
+}
+
+.cal-todaybtn[hidden] {
+  display: none;
+}
+
+.cal-d {
+  cursor: default;
+  width: 15px;
+  margin: 0 auto;
+  transition: background 0.12s;
+}
+
+.cal-d:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.cal-d.picked {
+  box-shadow: inset 0 0 0 1.5px #fff;
+}
+
+.cal-d.today.picked {
+  box-shadow: inset 0 0 0 1.5px #fff, 0 0 0 1.5px #ff453a;
+}
+
+.cal-grid {
+  cursor: default;
+}
+
+.wm-map {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.wm-canvas {
+  cursor: crosshair;
+}
+
+.wm-tip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font: 600 9.5px var(--font);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.wm-tip[hidden],
+.wm-hint[hidden] {
+  display: none;
+}
+
+.wm-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #000;
+  font: 700 9px var(--font);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+button.wm-city {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 8px;
+  color: inherit;
+  cursor: default;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+button.wm-city:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+button.wm-city.picking {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+/* Compact notch, right side: unread / muted / listening */
+#mini-grid.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #fff;
+}
+
+#mini-grid.status svg {
+  fill: currentColor;
+}
+
+#mini-grid.status-muted {
+  color: #ff453a;
+}
+
+.status-count {
+  font: 700 10px var(--font);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-bars {
+  display: flex;
+  align-items: center;
+  gap: 2.5px;
+  height: 12px;
+}
+
+.status-bars i {
+  width: 3px;
+  height: 40%;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.75);
+  animation: status-breathe 2.4s ease-in-out infinite;
+}
+
+.status-bars i:nth-child(2) { animation-delay: -0.8s; }
+.status-bars i:nth-child(3) { animation-delay: -1.6s; }
+
+@keyframes status-breathe {
+  0%, 100% { height: 35%; opacity: 0.55; }
+  50% { height: 100%; opacity: 1; }
+}
+
+/* Compact notch: a timer or alarm going off — icon, words, Stop */
+.live-ring-timer,
+.live-ring-alarm {
+  color: #fff !important;
+  gap: 8px !important;
+}
+
+.live-ring-timer .live-mark,
+.live-ring-alarm .live-mark {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  color: #ffb454;
+  display: grid;
+  place-items: center;
+  animation: live-wiggle 1.2s ease-in-out infinite;
+}
+
+.live-ring-timer .live-mark svg,
+.live-ring-alarm .live-mark svg {
+  fill: none;
+}
+
+.live-stop {
+  pointer-events: auto;
+  height: 20px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 0;
+  background: #ffb454;
+  color: #1b1206;
+  font: 700 10px var(--font);
+  cursor: default;
+  transition: transform 0.12s, background 0.12s;
+}
+
+.live-stop:hover {
+  background: #ffc876;
+}
+
+.live-stop:active {
+  transform: scale(0.92);
+}
+
+@keyframes live-wiggle {
+  0%, 60%, 100% { transform: rotate(0); }
+  70% { transform: rotate(-14deg); }
+  80% { transform: rotate(12deg); }
+  90% { transform: rotate(-6deg); }
 }

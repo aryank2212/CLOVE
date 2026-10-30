@@ -6,7 +6,7 @@
 
 import { State } from "../core/state";
 import {
-  Tools, cityTime, clockText, isDay, subsolarPoint, type ClockTab,
+  Tools, cityTime, clockText, isDay, nearestCity, subsolarPoint, type ClockTab,
 } from "../core/tools";
 import { N_, t, tl } from "../i18n/i18n";
 import { MAP_COLS, MAP_ROWS, MAP_STEP, MAP_TOP_LAT, isLand } from "./worldmask";
@@ -37,17 +37,18 @@ export function buildControls(): ViewHost {
   const bar = h("div", { class: "mp-bar" }, h("i"));
   const pos = h("span", { class: "mp-time" });
   const len = h("span", { class: "mp-time" });
-  const playBtn = iconBtn("mp-btn play", N_("Play or pause"), ICONS.play, () => void Tools.mediaControl("toggle"), 16);
+  const playBtn = iconBtn("mp-btn play", N_("Play or pause"), ICONS.play, () => void Tools.mediaControl("toggle"), 15);
+  const openBtn = iconBtn("mp-open", N_("Open Apple Music in Chrome"), ICONS.openOut, () => Tools.openAppleMusic(), 13, 2);
   const music = card(
     glow,
     h("div", { class: "mp" },
-      h("div", { class: "mp-top" }, art,
-        h("div", { class: "mp-text" }, player, title, artist,
-          h("div", { class: "mp-controls" },
-            iconBtn("mp-btn", N_("Previous"), ICONS.backward, () => void Tools.mediaControl("previous"), 13),
-            playBtn,
-            iconBtn("mp-btn", N_("Next"), ICONS.forward, () => void Tools.mediaControl("next"), 13)))),
-      h("div", { class: "mp-progress" }, pos, bar, len)),
+      h("div", { class: "mp-top" }, art, h("div", { class: "mp-text" }, player, title, artist), openBtn),
+      h("div", { class: "mp-bottom" },
+        h("div", { class: "mp-controls" },
+          iconBtn("mp-btn", N_("Previous"), ICONS.backward, () => void Tools.mediaControl("previous"), 13),
+          playBtn,
+          iconBtn("mp-btn", N_("Next"), ICONS.forward, () => void Tools.mediaControl("next"), 13)),
+        h("div", { class: "mp-progress" }, pos, bar, len))),
   );
 
   // Quick tiles
@@ -253,7 +254,7 @@ export function buildControls(): ViewHost {
     if (playBtn.dataset.key !== key) {
       playBtn.dataset.key = key;
       clear(playBtn);
-      playBtn.append(svg(m.playing ? ICONS.pause : ICONS.play, 16));
+      playBtn.append(svg(m.playing ? ICONS.pause : ICONS.play, 15));
     }
     music.classList.toggle("playing", m.playing);
   }
@@ -283,43 +284,109 @@ export function buildControls(): ViewHost {
 
 /** The city he is in: the first whose clock reads the same as this PC's (zone names vary: Asia/Calcutta, Asia/Kolkata). */
 function hereCity(now: Date) {
-  return Tools.cities.slice(0, 4).find((c) => cityTime(c.zone, now).offset === "") ?? null;
+  return Tools.cities.find((c) => cityTime(c.zone, now).offset === "") ?? null;
+}
+
+const DAY_MS = 86_400_000;
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
 export function buildTime(): ViewHost {
+  // ── The calendar: a click on a day shows it on the left; the wheel or the arrows change the month ──
   const bigDay = h("div", { class: "cal-day" });
   const bigWeekday = h("div", { class: "cal-weekday" });
   const bigMonth = h("div", { class: "cal-month" });
+  const relative = h("div", { class: "cal-rel" });
   const nextAlarm = h("div", { class: "cal-alarm" });
   const monthTitle = h("div", { class: "cal-title" });
+  const todayBtn = h("button", { class: "cal-todaybtn", text: t("Today") }) as HTMLButtonElement;
   const grid = h("div", { class: "cal-grid" });
   let shown = new Date();
   shown = new Date(shown.getFullYear(), shown.getMonth(), 1);
+  let picked: Date | null = null;
   const move = (d: number) => {
     shown = new Date(shown.getFullYear(), shown.getMonth() + d, 1);
     calKey = "";
     State.notify();
   };
+  const toToday = () => {
+    const n = new Date();
+    shown = new Date(n.getFullYear(), n.getMonth(), 1);
+    picked = null;
+    calKey = "";
+    State.notify();
+  };
+  todayBtn.addEventListener("click", (e) => { e.stopPropagation(); toToday(); });
+  monthTitle.addEventListener("click", (e) => { e.stopPropagation(); toToday(); });
+  grid.addEventListener("wheel", (e) => { e.preventDefault(); move(e.deltaY > 0 ? 1 : -1); }, { passive: false });
+  grid.addEventListener("click", (e) => {
+    const cell = (e.target as HTMLElement).closest<HTMLElement>(".cal-d");
+    if (!cell?.dataset.day) return;
+    e.stopPropagation();
+    const d = new Date(shown.getFullYear(), shown.getMonth(), Number(cell.dataset.day));
+    picked = picked && sameDay(picked, d) ? null : d;
+    calKey = "";
+    State.notify();
+  });
   const calendar = card(h("div", { class: "cal" },
-    h("div", { class: "cal-today" }, bigWeekday, bigDay, bigMonth, nextAlarm),
+    h("div", { class: "cal-today" }, bigWeekday, bigDay, bigMonth, relative, nextAlarm),
     h("div", { class: "cal-side" },
       h("div", { class: "cal-head" },
         iconBtn("cal-nav", N_("Previous month"), ICONS.chevronLeft, () => move(-1), 10, 2.2),
         monthTitle,
+        todayBtn,
         iconBtn("cal-nav", N_("Next month"), ICONS.chevronRight, () => move(1), 10, 2.2)),
       grid)));
-  monthTitle.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const n = new Date();
-    shown = new Date(n.getFullYear(), n.getMonth(), 1);
-    calKey = "";
-    State.notify();
-  });
 
-  // The world
+  // ── The world: hover for the time anywhere; click a city clock, then the map, to change it; wheel to cycle ──
   const canvas = h("canvas", { class: "wm-canvas" }) as HTMLCanvasElement;
+  const tip = h("div", { class: "wm-tip", hidden: true });
+  const hint = h("div", { class: "wm-hint", hidden: true, text: t("Click the map to choose a city") });
   const cities = h("div", { class: "wm-cities" });
-  const world = card(h("div", { class: "wm" }, canvas, cities));
+  const mapBox = h("div", { class: "wm-map" }, canvas, tip, hint);
+  const world = card(h("div", { class: "wm" }, mapBox, cities));
+  let picking: number | null = null;
+  let geo = { ox: 0, oy: 0, pitch: 1 };
+
+  const latLonAt = (e: MouseEvent) => {
+    const r = canvas.getBoundingClientRect();
+    const scale = r.width / (canvas.clientWidth || r.width);
+    const x = (e.clientX - r.left) / scale;
+    const y = (e.clientY - r.top) / scale;
+    const lon = ((x - geo.ox) / geo.pitch) * MAP_STEP - 180;
+    const lat = MAP_TOP_LAT - ((y - geo.oy) / geo.pitch) * MAP_STEP;
+    return { x, y, lat: Math.max(-60, Math.min(80, lat)), lon: Math.max(-180, Math.min(180, lon)) };
+  };
+  canvas.addEventListener("mousemove", (e) => {
+    const p = latLonAt(e);
+    const c = nearestCity(p.lat, p.lon);
+    tip.hidden = false;
+    tip.textContent = `${c.name} · ${cityTime(c.zone).time}`;
+    tip.style.left = `${Math.min(Math.max(p.x, 40), (canvas.clientWidth || 260) - 40)}px`;
+    tip.style.top = `${Math.max(p.y - 6, 10)}px`;
+  });
+  canvas.addEventListener("mouseleave", () => { tip.hidden = true; });
+  canvas.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (picking == null) {
+      // No city clock picked yet: say how.
+      hint.textContent = t("Click a city below first, then the map");
+      hint.hidden = false;
+      window.setTimeout(() => {
+        if (picking == null) hint.hidden = true;
+        hint.textContent = t("Click the map to choose a city");
+      }, 2200);
+      return;
+    }
+    const p = latLonAt(e);
+    Tools.setCity(picking, nearestCity(p.lat, p.lon));
+    picking = null;
+    hint.hidden = true;
+    cityKey = "";
+    mapKey = "";
+  });
 
   const el = h("div", { class: "view overview tools-view" }, h("div", { class: "left" }, calendar), h("div", { class: "right" }, world));
 
@@ -329,14 +396,23 @@ export function buildTime(): ViewHost {
 
   function syncCalendar(now: Date) {
     const lang = document.documentElement.lang || undefined;
-    const key = `${now.toDateString()}~${shown.getTime()}~${lang}`;
+    const key = `${now.toDateString()}~${shown.getTime()}~${picked?.getTime() ?? 0}~${lang}`;
     const next = Tools.nextAlarm(now);
     nextAlarm.textContent = next ? `⏰ ${String(next.alarm.h).padStart(2, "0")}:${String(next.alarm.m).padStart(2, "0")}` : "";
     if (key === calKey) return;
     calKey = key;
-    bigDay.textContent = String(now.getDate());
-    bigWeekday.textContent = now.toLocaleDateString(lang, { weekday: "long" });
-    bigMonth.textContent = now.toLocaleDateString(lang, { month: "long", year: "numeric" });
+    const day = picked ?? now;
+    const isToday = sameDay(day, now);
+    bigDay.textContent = String(day.getDate());
+    bigWeekday.textContent = day.toLocaleDateString(lang, { weekday: "long" });
+    bigWeekday.classList.toggle("other", !isToday);
+    bigMonth.textContent = day.toLocaleDateString(lang, { month: "long", year: "numeric" });
+    const diff = Math.round((new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() -
+      new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / DAY_MS);
+    relative.textContent = diff === 0 ? "" : diff === 1 ? t("Tomorrow") : diff === -1 ? t("Yesterday")
+      : diff > 0 ? t("In {0} days", { 0: diff }) : t("{0} days ago", { 0: -diff });
+    const onThisMonth = shown.getFullYear() === now.getFullYear() && shown.getMonth() === now.getMonth();
+    todayBtn.hidden = onThisMonth && !picked;
     monthTitle.textContent = shown.toLocaleDateString(lang, { month: "short", year: "numeric" });
     clear(grid);
     // Weeks start on Monday.
@@ -348,32 +424,52 @@ export function buildTime(): ViewHost {
     const days = new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate();
     for (let i = 0; i < first; i++) grid.append(h("span"));
     for (let d = 1; d <= days; d++) {
-      const today = shown.getFullYear() === now.getFullYear() && shown.getMonth() === now.getMonth() && d === now.getDate();
-      const dow = (first + d - 1) % 7;
-      grid.append(h("span", { class: `cal-d${today ? " today" : ""}${dow >= 5 ? " weekend" : ""}`, text: String(d) }));
+      const date = new Date(shown.getFullYear(), shown.getMonth(), d);
+      const cls = ["cal-d"];
+      if (sameDay(date, now)) cls.push("today");
+      if (picked && sameDay(date, picked)) cls.push("picked");
+      if ((first + d - 1) % 7 >= 5) cls.push("weekend");
+      const cell = h("span", { class: cls.join(" "), text: String(d) });
+      cell.dataset.day = String(d);
+      grid.append(cell);
     }
   }
 
   function syncWorld(now: Date) {
-    const key = `${Math.floor(now.getTime() / 60_000)}`;
+    const key = `${Math.floor(now.getTime() / 60_000)}~${Tools.cities.map((c) => c.name).join()}~${picking}`;
     if (key !== mapKey) {
       mapKey = key;
       drawMap(now);
     }
-    const ck = `${now.getHours()}:${now.getMinutes()}`;
+    if (picking != null) hint.hidden = false;
+    const ck = `${now.getHours()}:${now.getMinutes()}~${Tools.cities.map((c) => c.name).join()}~${picking}`;
     if (ck === cityKey) return;
     cityKey = ck;
     clear(cities);
     const here = hereCity(now);
     const sun = subsolarPoint(now);
-    for (const c of Tools.cities.slice(0, 4)) {
+    Tools.cities.forEach((c, i) => {
       const ct = cityTime(c.zone, now);
       const day = isDay(c.lat, c.lon, sun);
-      cities.append(h("div", { class: `wm-city${c === here ? " here" : ""}` },
-        h("span", { class: "wm-name" }, svg(day ? ICONS.sun : ICONS.moon, 8, { stroke: 2 }), h("b", { text: c.name })),
-        h("span", { class: "wm-time", text: ct.time }),
-        h("span", { class: "wm-off", text: c === here ? t("Here") : ct.offset })));
-    }
+      const chip = h("button", {
+        class: `wm-city${c === here ? " here" : ""}${picking === i ? " picking" : ""}`,
+        title: t("Click, then click the map to change it. Scroll to cycle."),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          picking = picking === i ? null : i;
+          if (picking == null) hint.hidden = true;
+          State.notify();
+        },
+      },
+      h("span", { class: "wm-name" }, svg(day ? ICONS.sun : ICONS.moon, 8, { stroke: 2 }), h("b", { text: c.name })),
+      h("span", { class: "wm-time", text: ct.time }),
+      h("span", { class: "wm-off", text: c === here ? t("Here") : ct.offset }));
+      chip.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        Tools.cycleCity(i, e.deltaY > 0 ? 1 : -1);
+      }, { passive: false });
+      cities.append(chip);
+    });
   }
 
   function drawMap(now: Date) {
@@ -389,6 +485,7 @@ export function buildTime(): ViewHost {
     const pitch = Math.min(cssW / MAP_COLS, cssH / MAP_ROWS);
     const ox = (cssW - pitch * MAP_COLS) / 2;
     const oy = (cssH - pitch * MAP_ROWS) / 2;
+    geo = { ox, oy, pitch };
     const sun = subsolarPoint(now);
     const r = Math.max(0.8, pitch * 0.36);
     for (let row = 0; row < MAP_ROWS; row++) {
@@ -402,24 +499,24 @@ export function buildTime(): ViewHost {
         g.fill();
       }
     }
-    // The cities: a dot each, the one he is in brighter, with a soft ring.
     const here = hereCity(now);
     const xy = (lat: number, lon: number) => ({
       x: ox + ((lon + 180) / MAP_STEP) * pitch,
       y: oy + ((MAP_TOP_LAT - lat) / MAP_STEP) * pitch,
     });
-    for (const c of Tools.cities.slice(0, 4)) {
+    Tools.cities.forEach((c, i) => {
       const p = xy(c.lat, c.lon);
       const mine = c === here;
-      g.fillStyle = mine ? "rgba(52,211,153,0.25)" : "rgba(255,180,84,0.22)";
+      const pick = picking === i;
+      g.fillStyle = pick ? "rgba(255,255,255,0.3)" : mine ? "rgba(52,211,153,0.25)" : "rgba(255,180,84,0.22)";
       g.beginPath();
-      g.arc(p.x, p.y, mine ? 6 : 5, 0, Math.PI * 2);
+      g.arc(p.x, p.y, pick ? 7 : mine ? 6 : 5, 0, Math.PI * 2);
       g.fill();
-      g.fillStyle = mine ? "#34D399" : "#FFB454";
+      g.fillStyle = pick ? "#fff" : mine ? "#34D399" : "#FFB454";
       g.beginPath();
       g.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
       g.fill();
-    }
+    });
     // Where the sun is overhead.
     const s = xy(sun.lat, sun.lon);
     const grad = g.createRadialGradient(s.x, s.y, 0, s.x, s.y, 14);
@@ -430,6 +527,11 @@ export function buildTime(): ViewHost {
     g.arc(s.x, s.y, 14, 0, Math.PI * 2);
     g.fill();
   }
+
+  // Leaving the page drops a half-done pick.
+  State.subscribe(() => {
+    if (picking != null && (State.view !== "time" || State.mode !== "expanded")) picking = null;
+  });
 
   return {
     el,

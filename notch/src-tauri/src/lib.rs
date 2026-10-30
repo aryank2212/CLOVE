@@ -879,6 +879,7 @@ pub fn run() {
             controls::controls_action,
             controls::media_state,
             controls::media_control,
+            controls::open_in_chrome,
             set_paused,
             shortcuts_status,
             shortcuts_suspend,

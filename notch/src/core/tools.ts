@@ -61,6 +61,65 @@ export const DEFAULT_CITIES: City[] = [
   { name: "Dubai", zone: "Asia/Dubai", lat: 25.2, lon: 55.3 },
 ];
 
+/** Cities to pick from on the map (a click picks the nearest). */
+export const CITY_LIST: City[] = [
+  { name: "New Delhi", zone: "Asia/Kolkata", lat: 28.6, lon: 77.2 },
+  { name: "Mumbai", zone: "Asia/Kolkata", lat: 19.1, lon: 72.9 },
+  { name: "Bengaluru", zone: "Asia/Kolkata", lat: 13.0, lon: 77.6 },
+  { name: "Kathmandu", zone: "Asia/Kathmandu", lat: 27.7, lon: 85.3 },
+  { name: "Dhaka", zone: "Asia/Dhaka", lat: 23.8, lon: 90.4 },
+  { name: "Karachi", zone: "Asia/Karachi", lat: 24.9, lon: 67.0 },
+  { name: "Dubai", zone: "Asia/Dubai", lat: 25.2, lon: 55.3 },
+  { name: "Riyadh", zone: "Asia/Riyadh", lat: 24.7, lon: 46.7 },
+  { name: "Tehran", zone: "Asia/Tehran", lat: 35.7, lon: 51.4 },
+  { name: "Moscow", zone: "Europe/Moscow", lat: 55.8, lon: 37.6 },
+  { name: "Istanbul", zone: "Europe/Istanbul", lat: 41.0, lon: 29.0 },
+  { name: "Cairo", zone: "Africa/Cairo", lat: 30.0, lon: 31.2 },
+  { name: "Nairobi", zone: "Africa/Nairobi", lat: -1.3, lon: 36.8 },
+  { name: "Johannesburg", zone: "Africa/Johannesburg", lat: -26.2, lon: 28.0 },
+  { name: "Lagos", zone: "Africa/Lagos", lat: 6.5, lon: 3.4 },
+  { name: "Berlin", zone: "Europe/Berlin", lat: 52.5, lon: 13.4 },
+  { name: "Paris", zone: "Europe/Paris", lat: 48.9, lon: 2.4 },
+  { name: "London", zone: "Europe/London", lat: 51.5, lon: -0.1 },
+  { name: "Reykjavik", zone: "Atlantic/Reykjavik", lat: 64.1, lon: -21.9 },
+  { name: "São Paulo", zone: "America/Sao_Paulo", lat: -23.6, lon: -46.6 },
+  { name: "Buenos Aires", zone: "America/Argentina/Buenos_Aires", lat: -34.6, lon: -58.4 },
+  { name: "New York", zone: "America/New_York", lat: 40.7, lon: -74.0 },
+  { name: "Toronto", zone: "America/Toronto", lat: 43.7, lon: -79.4 },
+  { name: "Chicago", zone: "America/Chicago", lat: 41.9, lon: -87.6 },
+  { name: "Mexico City", zone: "America/Mexico_City", lat: 19.4, lon: -99.1 },
+  { name: "Denver", zone: "America/Denver", lat: 39.7, lon: -105.0 },
+  { name: "San Francisco", zone: "America/Los_Angeles", lat: 37.8, lon: -122.4 },
+  { name: "Anchorage", zone: "America/Anchorage", lat: 61.2, lon: -149.9 },
+  { name: "Honolulu", zone: "Pacific/Honolulu", lat: 21.3, lon: -157.9 },
+  { name: "Auckland", zone: "Pacific/Auckland", lat: -36.8, lon: 174.8 },
+  { name: "Sydney", zone: "Australia/Sydney", lat: -33.9, lon: 151.2 },
+  { name: "Perth", zone: "Australia/Perth", lat: -31.9, lon: 115.9 },
+  { name: "Tokyo", zone: "Asia/Tokyo", lat: 35.7, lon: 139.7 },
+  { name: "Seoul", zone: "Asia/Seoul", lat: 37.6, lon: 127.0 },
+  { name: "Shanghai", zone: "Asia/Shanghai", lat: 31.2, lon: 121.5 },
+  { name: "Hong Kong", zone: "Asia/Hong_Kong", lat: 22.3, lon: 114.2 },
+  { name: "Singapore", zone: "Asia/Singapore", lat: 1.35, lon: 103.8 },
+  { name: "Bangkok", zone: "Asia/Bangkok", lat: 13.8, lon: 100.5 },
+  { name: "Jakarta", zone: "Asia/Jakarta", lat: -6.2, lon: 106.8 },
+];
+
+/** The city in CITY_LIST nearest to (lat, lon). */
+export function nearestCity(lat: number, lon: number): City {
+  const r = Math.PI / 180;
+  let best = CITY_LIST[0];
+  let bestD = Infinity;
+  for (const c of CITY_LIST) {
+    const d = Math.acos(Math.min(1, Math.sin(lat * r) * Math.sin(c.lat * r) +
+      Math.cos(lat * r) * Math.cos(c.lat * r) * Math.cos((lon - c.lon) * r)));
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
 const KEY = "clove-tools-v1";
 
 interface Saved {
@@ -74,12 +133,13 @@ interface Saved {
   laps: number[];
   alarms: Alarm[];
   clockTab: ClockTab;
+  cities: City[];
 }
 
 function load(): Saved {
   const fallback: Saved = {
     timerDuration: 5 * 60_000, timerEndAt: null, timerLeft: 5 * 60_000, timerStarted: false,
-    swStartAt: null, swAcc: 0, laps: [], alarms: [], clockTab: "timer",
+    swStartAt: null, swAcc: 0, laps: [], alarms: [], clockTab: "timer", cities: DEFAULT_CITIES.slice(0, 4),
   };
   try {
     const raw = globalThis.localStorage?.getItem(KEY);
@@ -107,7 +167,6 @@ class ToolsState {
   ringing: { kind: "timer" | "alarm"; label: string } | null = null;
   /** Called when a timer ends or an alarm goes off (the island opens on the Controls page). */
   onRing: (() => void) | null = null;
-  cities: City[] = DEFAULT_CITIES;
 
   private s: Saved = load();
   private lastAlarmMinute = "";
@@ -161,11 +220,37 @@ class ToolsState {
     window.setTimeout(() => void this.refreshMedia(), action === "toggle" ? 300 : 600);
   }
 
+  /** Apple Music in Chrome. */
+  openAppleMusic() {
+    void call<boolean>("open_in_chrome", { url: "https://music.apple.com/" });
+  }
+
   mediaPosition(now = Date.now()): number {
     const m = this.media;
     if (!m) return 0;
     const p = m.position + (m.playing ? (now - this.mediaAt) / 1000 : 0);
     return m.length > 0 ? Math.min(p, m.length) : p;
+  }
+
+  // ── world clocks ────────────────────────────────────────────────────────────
+  get cities(): City[] {
+    return this.s.cities.length === 4 ? this.s.cities : DEFAULT_CITIES.slice(0, 4);
+  }
+
+  /** Puts `city` in slot `i` (0–3). */
+  setCity(i: number, city: City) {
+    const list = [...this.cities];
+    list[i] = city;
+    this.s.cities = list;
+    this.save();
+    State.notify();
+  }
+
+  /** The next (or previous) city in CITY_LIST for slot `i`: the mouse wheel on a city clock. */
+  cycleCity(i: number, dir: number) {
+    const cur = this.cities[i];
+    const at = CITY_LIST.findIndex((c) => c.name === cur.name);
+    this.setCity(i, CITY_LIST[(at + dir + CITY_LIST.length) % CITY_LIST.length]);
   }
 
   // ── timer ───────────────────────────────────────────────────────────────────
