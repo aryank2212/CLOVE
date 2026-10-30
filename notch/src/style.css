@@ -675,6 +675,97 @@ body {
 
 /* ── Agent pills ────────────────────────────────────────────────────────── */
 
+/* CLOVE fork: the shortcuts folder. Closed: a small square of their colours; open: the grid over the whole card. */
+.pill-shelf {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pill-folder {
+  position: relative;
+  flex: none;
+  height: 100%;
+  aspect-ratio: 1;
+  border-radius: 18px;
+  background: var(--card-flat);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: grid;
+  place-items: center;
+  cursor: default;
+  transition: transform 0.18s ease, opacity 0.18s ease, border-color 0.15s;
+}
+
+.pill-folder:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.folder-dots {
+  width: 46%;
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 22%;
+}
+
+.folder-dots i {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font: 700 13px var(--font);
+  font-style: normal;
+}
+
+.folder-dots svg {
+  width: 100%;
+  height: 100%;
+  fill: #fff;
+}
+
+.pill-folder .pill-badge {
+  top: -4px;
+  right: -4px;
+}
+
+.pill-folder .pill-badge[hidden] {
+  display: none;
+}
+
+.shelf-spare {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+}
+
+.pill-shelf > .pills {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.25);
+  transform-origin: 100% 50%;
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1), opacity 0.16s ease;
+}
+
+.pill-shelf.open > .pills {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.pill-shelf.open > .pill-folder,
+.pill-shelf.open > .shelf-spare {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pill-shelf.empty > .pill-folder {
+  display: none;
+}
+
 .pills {
   position: relative;
   z-index: 1;
@@ -698,6 +789,15 @@ body {
   cursor: default;
   transition: transform 0.2s cubic-bezier(0.3, 1.2, 0.4, 1), background 0.18s, border-color 0.18s,
     box-shadow 0.18s, filter 0.18s;
+}
+
+.pill .pill-logo {
+  margin-left: 12px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  color: #fff;
 }
 
 .pill .mini {

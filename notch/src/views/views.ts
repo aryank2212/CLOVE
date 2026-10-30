@@ -2,6 +2,7 @@
 // colours and wording are copied from the Swift views so both platforms read
 // identically.
 
+import { PILL_LOGOS } from "./logos";
 import { h, svg, clear, dot } from "./dom";
 import { ICONS } from "./icons";
 import { Ticker } from "./ticker";
@@ -216,7 +217,27 @@ function buildOverview(actions: ViewActions): ViewHost {
   );
   const left = card(null, leftBody, jump);
   const pills = h("div", { class: "pills" });
-  const right = card(null, pills);
+  // CLOVE fork: the shortcuts sit in a folder (a small square with their colours) that opens out to the full grid.
+  let folderOpen = false;
+  const folderDots = h("div", { class: "folder-dots" });
+  const folderBadge = h("div", { class: "pill-badge", hidden: true });
+  const folder = h("button", {
+    class: "pill-folder", title: tl("Shortcuts"),
+    onclick: (e: Event) => { e.stopPropagation(); setFolder(true); },
+  }, folderDots, folderBadge);
+  const spare = h("div", { class: "shelf-spare" });
+  const shelf = h("div", { class: "pill-shelf" }, spare, folder, pills);
+  function setFolder(open: boolean) {
+    if (folderOpen === open) return;
+    folderOpen = open;
+    shelf.classList.toggle("open", open);
+  }
+  // A click on a shortcut, or on the grid around them, folds it back.
+  pills.addEventListener("click", () => setFolder(false));
+  State.subscribe(() => {
+    if (State.mode !== "expanded" || State.view !== "overview") setFolder(false);
+  });
+  const right = card(null, shelf);
   // Opened from a plan pill in the header: stands in for the left card.
   const plan = new PlanCard();
   let planTimer: number | null = null;
@@ -435,6 +456,22 @@ function buildOverview(actions: ViewActions): ViewHost {
         pillIds = pillKey;
         clear(pills);
         spotifyPill = null;
+        clear(folderDots);
+        for (const t of others) {
+          const logo = PILL_LOGOS[t.id];
+          folderDots.append(logo
+            ? h("i", { title: t.name }, svg(logo, 15))
+            : h("i", { title: t.name, class: "initial", text: (t.name || "?").slice(0, 1).toUpperCase() }));
+        }
+        shelf.classList.toggle("empty", others.length === 0);
+        const badges = ["error", "approval", "finished"] as const;
+        const badge = badges.find((b) => others.some((t) => t.pillBadge === b));
+        clear(folderBadge);
+        folderBadge.hidden = !badge;
+        if (badge) {
+          const colors = { approval: "#F5A524", finished: "#22C55E", error: "#F4505E" } as const;
+          folderBadge.append(h("i", { style: `background:${colors[badge]}` }));
+        }
         for (const t of others) {
           if (t.id === SPOTIFY_ID) {
             spotifyPill = buildSpotifyPill(t, () => actions.setFocus(t.id));
@@ -466,7 +503,9 @@ export function hasSessionTicker(task: AgentTask): boolean {
 
 function buildPill(task: AgentTask, actions: ViewActions): HTMLElement {
   const label = task.id === "integration_claude" ? pillDefinition(task.id)!.name : task.name;
-  const canvas = createMiniBot(task, 24);
+  // CLOVE fork: the shortcut's own logo, in white, where it has one.
+  const logo = PILL_LOGOS[task.id];
+  const canvas = logo ? h("span", { class: "pill-logo" }, svg(logo, 14)) : createMiniBot(task, 24);
   const pill = h(
     "div",
     { class: "pill", onclick: () => actions.setFocus(task.id) },
