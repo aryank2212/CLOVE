@@ -45,6 +45,8 @@ export interface ViewActions {
   openUrl(url: string): void;
   /** CLOVE fork: tells CLOVE something as if he had said it (the banner's buttons). */
   tellClove(text: string): void;
+  /** CLOVE fork: the header's mic button: CLOVE stops or starts listening. */
+  toggleCloveMic(): void;
   decide(d: "allow" | "deny"): void;
   /** Answers the question Claude Code asked: question text → chosen label. */
   answer(answers: Record<string, string | string[]>): void;
@@ -123,6 +125,8 @@ export function buildHeader(actions: ViewActions): ViewHost {
 
   const gearBtn = h("button", { title: tl("Settings"), onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: tl("Mute"), onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
+  // CLOVE fork: CLOVE's microphone (hidden while CLOVE isn't running).
+  const micBtn = h("button", { class: "clove-mic", onclick: () => actions.toggleCloveMic() }, svg(ICONS.micOn, 14));
   // Plan usage pills (off by default): before the gear, Claude first, as on the Mac.
   const claudePill = buildPlanPill(false);
   const codexPill = buildPlanPill(true);
@@ -138,7 +142,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
     "div",
     { id: "header" },
     h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
-    h("div", { class: "header-actions" }, planPills, gearBtn, soundBtn),
+    h("div", { class: "header-actions" }, planPills, micBtn, gearBtn, soundBtn),
   );
   const headerActions = el.lastElementChild as HTMLElement;
 
@@ -154,6 +158,12 @@ export function buildHeader(actions: ViewActions): ViewHost {
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
       clear(soundBtn);
       soundBtn.append(svg(State.settings.soundEnabled ? ICONS.speakerOn : ICONS.speakerOff, 14));
+      const muted = State.cloveMuted;
+      micBtn.hidden = muted === null;
+      micBtn.classList.toggle("muted", muted === true);
+      micBtn.title = muted ? t("Unmute CLOVE") : t("Mute CLOVE");
+      clear(micBtn);
+      micBtn.append(svg(muted ? ICONS.micOff : ICONS.micOn, 14));
       syncPlanPills();
       el.style.opacity = v === "confused" ? "0" : "1";
     },

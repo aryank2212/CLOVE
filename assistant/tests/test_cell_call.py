@@ -124,6 +124,8 @@ async def main():
     calls = FakeCalls()
     a = SimpleNamespace(dashboard=SimpleNamespace(prefs={"answercalls": True}), calls=calls,
                         messages=SimpleNamespace(recent=deque()))
+    a.muted = False
+    a.set_muted = lambda on: setattr(a, "muted", bool(on)) or bool(on)
     w = CW.CallWatch(a)
     config.CLOVE_TELEGRAM_BOT_TOKEN = ""
     cell_call.ringing = lambda raw=None: {"path": "/x/call1", "state": "incoming", "number": "+919876", "name": ""}

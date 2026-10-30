@@ -750,6 +750,7 @@ function connect() {
       case 'route': S.route = m; renderMic(); break;
       case 'notice': notice = m.text || ''; renderState(); addEvent(m); break;
       case 'toast': if (m.ts > S.since) toast(m.text, m.level); addEvent(m); break;
+      case 'muted': S.muted = !!m.value; store.set('muted', S.muted); renderMic(); break;   // muted from Clove Notch or a call
       case 'telemetry': S.tel = m; renderTelemetry(); break;
       case 'services': S.services = m.items; S.svcChecked = m.checked; renderServices(); break;
       case 'workspace': S.ws = m; renderWorkspace(); break;

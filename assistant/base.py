@@ -307,10 +307,23 @@ class Assistant:
             log.warning("greeting failed: %s", e)
 
     # ---- inputs from the window and the microphone -------------------------
+    def set_muted(self, on: bool) -> bool:
+        """Stop or start listening, from wherever (the window, Clove Notch's mic button, a phone call), and keep the
+        window and the notch showing it."""
+        on = bool(on)
+        changed = on != self.muted
+        self.muted = on
+        if changed:
+            log.info("microphone %s", "muted" if on else "on")
+            self.ui.send(type="muted", value=on)
+            if getattr(self, "notch", None) is not None:
+                self.notch.event("CloveMute", muted=on)
+        return on
+
     def on_ui(self, m: dict):
         t = m.get("type")
         if t == "mute":
-            self.muted = bool(m.get("value"))
+            self.set_muted(m.get("value"))
         elif t == "text":
             text = str(m.get("text", "")).strip()[:2000]
             if text:

@@ -156,6 +156,24 @@ async function main() {
   });
 
   registerHookHandlers(island);
+
+  // CLOVE fork: the header's mic button shows CLOVE's state (and stays right if CLOVE restarts).
+
+  const cloveMicStatus = () => void Bridge.cloveMute("status").then((muted) => {
+
+    if (muted !== State.cloveMuted) {
+
+      State.cloveMuted = muted;
+
+      State.notify();
+
+    }
+
+  });
+
+  cloveMicStatus();
+
+  window.setInterval(cloveMicStatus, 15_000);
   registerPhoneLink(island);
   registerIntegrationHandlers(island);
   registerShortcutHandlers(island, () => setPaused(false));

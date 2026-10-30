@@ -245,6 +245,8 @@ class AppState {
   pendingApproval: ApprovalInfo | null = null;
   /** CLOVE fork: the message or call the banner shows (a CloveNotification), like a phone's notification. */
   notice: CloveNotice | null = null;
+  /** CLOVE fork: CLOVE isn't listening (the header's mic button); null while CLOVE isn't running. */
+  cloveMuted: boolean | null = null;
   /** The pill that was in front when the card came up; it comes back after. */
   focusBeforeApproval: string | null = null;
 

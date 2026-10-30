@@ -186,6 +186,12 @@ export class Island {
       },
       // The ↗ button — same targets as openAgentTarget() on macOS.
       tellClove: (text: string) => void Bridge.cloveTell(text),
+      toggleCloveMic: () => {
+        void Bridge.cloveMute("toggle").then((muted) => {
+          State.cloveMuted = muted;
+          State.notify();
+        });
+      },
       openTarget: () => {
         const task = State.focusTask;
         if (!task) return;

@@ -756,6 +756,9 @@ body {
 }
 
 /* Claude's final message on the finished card: one line, never past the card. */
+/* CLOVE fork: the header's mic button while CLOVE is muted. */
+#header .clove-mic.muted { color: #FF453A; }
+
 /* CLOVE fork: a message's text on the banner, two lines at most. */
 .sub.two-lines {
   display: -webkit-box;

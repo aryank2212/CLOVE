@@ -75,11 +75,11 @@ class CallWatch:
         theirs = live and not a.calls.active           # a call he takes himself (or one ringing before CLOVE picks up)
         if theirs and not self.quieted:
             self.quieted, self.was_muted = True, bool(a.muted)
-            a.muted = True
+            a.set_muted(True)
             log.info("phone call on the line: the assistant stops listening until it ends")
         elif not theirs and self.quieted:
             self.quieted = False
-            a.muted = self.was_muted
+            a.set_muted(self.was_muted)
     async def check(self, phone: list[dict] | None = None):
         a = self.a
         if not self.on() or a.calls.active or time.monotonic() - self.answered_at < 20:

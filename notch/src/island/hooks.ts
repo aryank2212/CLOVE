@@ -48,6 +48,8 @@ function cancelStopTimer(id: string): boolean {
 const TURN_OVER = new Set(["Stop", "StopFailure", "UserPromptSubmit", "SessionEnd", "Interrupt"]);
 
 interface HookPayload {
+  /** CLOVE fork (CloveMute): CLOVE isn't listening. */
+  muted?: boolean;
   /** CLOVE fork (CloveNotification): what kind, from whom, what. */
   kind?: string;
   sender?: string;
@@ -250,6 +252,13 @@ export function registerHookHandlers(island: Island) {
 function handleHook(island: Island, payload: HookPayload) {
   // Account-wide numbers from the status line relay, not part of any session:
   // keep the latest, nothing else (no reveal, no sound), paused or not.
+  // CLOVE fork: CLOVE's microphone went on or off (from its window, this notch, or a phone call): the header follows.
+  if (payload.hook_event_name === "CloveMute") {
+    State.cloveMuted = payload.muted === true;
+    State.notify();
+    return;
+  }
+
   if (payload.hook_event_name === "StatusLine") {
     const usage = parseClaudePlan(payload.rate_limits);
     if (usage) setClaudePlanUsage(usage);
