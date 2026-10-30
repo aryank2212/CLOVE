@@ -86,5 +86,66 @@ async def scenario():
 
 
 asyncio.run(scenario())
+
+
+# ---- away: forwarded to Telegram ------------------------------------------------------------------------
+import config  # noqa: E402
+import phone  # noqa: E402
+import away as A  # noqa: E402
+
+sent = []
+
+
+async def away_scenario():
+    loop = asyncio.get_running_loop()
+    prefs = {"announce": True, "forward": True}
+    told = []
+
+    async def notify(text):
+        told.append(text)
+    a = SimpleNamespace(
+        loop=loop, dashboard=SimpleNamespace(prefs=prefs), dictation=SimpleNamespace(on=False),
+        focus=SimpleNamespace(active=False), calls=SimpleNamespace(audible=lambda: False),
+        wake=SimpleNamespace(wake=lambda why: None), notify=notify)
+    a.away = A.Away(a)
+    w = N.Notifications(a)
+    config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, config.PHONE_INBOX = "t", "c", False
+    phone.send = lambda text: sent.append(text)
+
+    w.seen_note(N.parse(payload("Google Chrome", "Sam", "web.whatsapp.com\n\nat the PC")))
+    await asyncio.sleep(0.2)
+    check("at the PC: nothing goes to Telegram", sent == [])
+
+    check("saying he's leaving turns away on", "Telegram" in a.away.set(True) and a.away.away)
+    w.seen_note(N.parse(payload("Google Chrome", "Priya", "www.linkedin.com\n\nquick call?")))
+    w.seen_note(N.parse(payload("Google Chrome", "Mum", "web.whatsapp.com\n\ndinner at 8")))
+    await asyncio.sleep(0.2)
+    check("away: messages arriving together are one Telegram message", len(sent) == 1)
+    check("with sender, app and text", sent and "LinkedIn · Priya: quick call?" in sent[0] and "WhatsApp · Mum: dinner at 8" in sent[0])
+    check("still read out loud too, in case the guess is wrong", any("Priya" in t for t in told))
+
+    prefs["forward"] = False
+    w.seen_note(N.parse(payload("Google Chrome", "Dad", "web.whatsapp.com\n\nok")))
+    await asyncio.sleep(0.2)
+    check("with the setting off nothing is forwarded", len(sent) == 1)
+    prefs["forward"] = True
+    config.TELEGRAM_BOT_TOKEN = ""
+    w.seen_note(N.parse(payload("Google Chrome", "Dad", "web.whatsapp.com\n\nok again")))
+    await asyncio.sleep(0.2)
+    check("without Telegram set up nothing is forwarded", len(sent) == 1)
+
+    told.clear()
+    a.away.set(False)
+    await a.away._welcome_back()
+    check("back: he hears who messaged while he was away", told and "Priya" in told[0] and "Mum" in told[0])
+    check("and only once", a.away.forwarded == [])
+
+    a.away.said_away, a.away.last_seen = False, A.time.monotonic() - (config.AWAY_AFTER_MIN * 60 + 1)
+    check("nothing moved for a while counts as away", a.away.away)
+    a.away.last_seen, a.away.screen_locked = A.time.monotonic(), True
+    check("a locked screen counts as away", a.away.away)
+
+
+asyncio.run(away_scenario())
 print("ALL PASSED" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

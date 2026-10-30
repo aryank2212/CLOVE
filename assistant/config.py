@@ -157,6 +157,8 @@ FOCUS_DISTRACTIONS = [d.strip() for d in _env("FOCUS_DISTRACTIONS",
 # Text or voice-note Clove from your phone via your Telegram bot (TELEGRAM_BOT_TOKEN/CHAT_ID). Off by default: a bot
 # token can only be polled by one program, so leave it off if another service (e.g. Hermes) reads the same bot.
 PHONE_INBOX = _env("PHONE_INBOX", "off").lower() == "on"
+# Away from the PC (screen locked, or pointer and window still this long): message notifications go to Telegram too.
+AWAY_AFTER_MIN = float(_env("AWAY_AFTER_MIN", "10") or 10)
 # Short chimes: heard you (wake), job done/failed, dictation on/off
 EARCONS = _env("EARCONS", "on").lower() != "off"
 EARCON_VOLUME = float(_env("EARCON_VOLUME", "0.18"))

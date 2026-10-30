@@ -340,6 +340,9 @@ DECLARATIONS = [
     _fn("weather_outfit", "Weather + outfit suggestion.", {"location": _s("STRING")}),
     _fn("notifications", "The PC's recent notifications (messages on WhatsApp, Instagram, X, LinkedIn..., and others), "
         "newest last. For 'what did I miss', 'any messages', 'who texted me'.", {"platform": _s("STRING", "only this app, e.g. WhatsApp")}),
+    _fn("away", "He's leaving the PC (on=true: 'I'm heading out', 'I'll be away') or back (on=false). While away, "
+        "message notifications are forwarded to his Telegram. It also ends by itself when he uses the PC again.",
+        {"on": _s("BOOLEAN")}, ["on"]),
     _fn("find_jobs", "Find jobs.", {"role": _s("STRING"), "location": _s("STRING"), "skills": _s("STRING")}, ["role"]),
     _fn("cover_letter", "Draft a cover letter.", {"role": _s("STRING"), "company": _s("STRING"), "resume": _s("STRING")}, ["role","company"]),
     _fn("palace_remember", "Remember item at a location.", {"location": _s("STRING"), "item": _s("STRING")}, ["location","item"]),
@@ -452,7 +455,7 @@ LOCAL_TOOLS = {                 # tool -> parameters it keeps (None = all). Thin
     "find_restaurant": ["cuisine","location"], "track_package": ["tracking_number","carrier"],
     "travel_plan": ["destination"], "log_habit": ["name","note"], "habit_status": ["name"],
     "list_habits": None, "summarize_document": ["path"], "run_scene": ["name"],
-    "list_scenes": None, "explain_contract": ["clause"], "weather_outfit": ["location"], "notifications": ["platform"],
+    "list_scenes": None, "explain_contract": ["clause"], "weather_outfit": ["location"], "notifications": ["platform"], "away": ["on"],
     "find_jobs": ["role","location"], "cover_letter": ["role","company"],
     "palace_remember": ["location","item"], "palace_recall": ["location"], "palace_list": None,
     "guide": None, "pair_mode": None, "answer_agent": None, "dictate": None, "type_text": None, "focus": None, "learned_shortcuts": None, "second_opinion": None,
@@ -1212,6 +1215,8 @@ class Toolbox:
         if name == "explain_contract":
             import contract_explainer
             return await contract_explainer.explain(a.get("clause",""))
+        if name == "away":
+            return self.j.away.set(bool(a.get("on", True)))
         if name == "notifications":
             return self.j.messages.listing(a.get("platform", ""))
         if name == "weather_outfit":

@@ -4,7 +4,8 @@ is kept for a while so he can ask what came in.
 
 It listens to org.freedesktop.Notifications on the session bus (`busctl --user monitor`), so it sees what any app
 shows, including Chrome's web notifications, whatever draws them on screen. Nothing is sent anywhere until a
-message is announced: then its sender and text go to the brain like anything he says.
+message is announced: then its sender and text go to the brain like anything he says. While he is away from the
+PC (away.py) messages also go to his own Telegram bot, so he sees them on his phone.
 
 Message text is somebody else's words: it reaches the brain marked as data, never as an instruction, and replying
 goes through the usual approval.
@@ -103,6 +104,8 @@ class Notifications:
         self.queue: list[Note] = []
         self.seen: dict[tuple, float] = {}
         self.flush: asyncio.TimerHandle | None = None
+        self.outbox: list[Note] = []          # for Telegram, while he's away
+        self.send_at: asyncio.TimerHandle | None = None
         self.running = False
 
     # ---- reading the bus -------------------------------------------------------------------------------
@@ -160,6 +163,10 @@ class Notifications:
             return
         self.seen = {k: t for k, t in self.seen.items() if now - t < REPEAT_S}
         self.seen[key] = now
+        if self.forwarding():
+            self.outbox.append(note)
+            if self.send_at is None:
+                self.send_at = self.a.loop.call_later(BATCH_S, lambda: asyncio.create_task(self._forward()))
         if not self.announcing():
             return
         self.queue.append(note)
@@ -175,6 +182,33 @@ class Notifications:
             return False
         calls = getattr(a, "calls", None)
         return not (calls and calls.audible())
+
+    def forwarding(self) -> bool:
+        """Send to Telegram too? While he's away from the PC, with Telegram set up and the setting on."""
+        import config
+        a = self.a
+        away = getattr(a, "away", None)
+        return bool(away and away.away and config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID
+                    and a.dashboard.prefs.get("forward", True))
+
+    async def _forward(self):
+        self.send_at = None
+        notes, self.outbox = self.outbox[:10], []
+        if not notes:
+            return
+        import config
+        import phone
+        text = "\n".join(f"{n.platform} · {n.sender}: {n.body}" if n.body else f"{n.platform} · {n.sender}"
+                         for n in notes)
+        text += ("\n\nReply here and CLOVE sends it." if config.PHONE_INBOX
+                 else "\n\n(CLOVE, while you're away from the PC.)")
+        try:
+            await asyncio.to_thread(phone.send, text)
+        except Exception as e:
+            log.warning("could not forward to Telegram: %s", e)
+            return
+        log.info("forwarded %d message(s) to Telegram", len(notes))
+        self.a.away.forwarded += [f"{n.platform}, from {n.sender}: {n.body[:120]}" for n in notes]
 
     async def _announce(self):
         self.flush = None
