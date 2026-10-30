@@ -94,6 +94,8 @@ class Assistant:
         self.pair = Pair(self)
         from dashboard import Dashboard
         self.dashboard = Dashboard(self)
+        from notifications import Notifications
+        self.messages = Notifications(self)      # message notifications: announced, and kept for "what came in?"
         from notch import Notch
         self.notch = Notch(self)             # Clove Notch app at the top of the screen, when it runs
         self._notch_utt = -1
@@ -689,7 +691,7 @@ class Assistant:
         bridge.on_stale = lambda have, want: (log.warning("Chrome extension is out of date (v%s, need v%s)", have, want),
                                               self.ui.send(type="notice", text=f"Reload the Clove Hands extension in Chrome (v{have} loaded, v{want} available): chrome://extensions"))
         await bridge.start()
-        tasks = [asyncio.create_task(c) for c in (self._ticker(), self._watch_audio_route(), self._narrator(), self._memory_keeper(), self._screen_feeder(), self._ctl(), self._phone(),
+        tasks = [asyncio.create_task(c) for c in (self._ticker(), self._watch_audio_route(), self._narrator(), self._memory_keeper(), self._screen_feeder(), self._ctl(), self._phone(), self.messages.run(),
                                                      self.dashboard.run())]
         self.send_engine()
         if not first:
