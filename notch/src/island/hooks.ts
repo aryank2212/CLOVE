@@ -353,7 +353,10 @@ function handleHook(island: Island, payload: HookPayload) {
       if (line) State.appendStep(agentId, line);
       const pill = State.tasks.find((x) => x.id === agentId);
       if (pill) pill.finalLine = line;
-      State.notice = { pillId: agentId, app: agentName(validAgent ?? ""), kind, sender, text };
+      const app = agentName(validAgent ?? "");
+      State.notice = { pillId: agentId, app, kind, sender, text };
+      State.cloveLog = [...State.cloveLog, { app, kind, sender, text, at: Date.now() }].slice(-50);
+      if (kind === "message") State.cloveUnread = { ...State.cloveUnread, [app]: (State.cloveUnread[app] ?? 0) + 1 };
       Sound.play(kind === "ringing" ? "question" : kind === "ended" ? "finish" : "pop");
       if (!State.pendingApproval) {                  // a card waiting for his answer is never covered
         State.setFocus(agentId);

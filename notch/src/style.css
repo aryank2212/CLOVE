@@ -3142,3 +3142,136 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
   unicode-bidi: plaintext;
   text-align: start;
 }
+
+/* ── CLOVE fork: the "While you were busy" inbox, unread chips, "Ask CLOVE…" ── */
+.shelf-spare.inbox {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 2px 4px 2px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  cursor: default;
+  border-radius: 12px;
+  transition: background 0.15s;
+}
+
+.shelf-spare.inbox:hover:not(.quiet) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.inbox-title {
+  font: 600 9.5px var(--font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim-3);
+}
+
+.inbox-counts {
+  font: 600 13px var(--font);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shelf-spare.quiet .inbox-counts {
+  color: var(--dim-2);
+}
+
+.inbox-newest {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font: 500 11px var(--font);
+  color: var(--dim-2);
+  white-space: nowrap;
+}
+
+.inbox-newest svg {
+  flex: none;
+  fill: #fff;
+}
+
+.inbox-newest b {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.inbox-newest span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unread-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.unread-chip {
+  height: 20px;
+  padding: 0 7px 0 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--card-flat);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 10.5px var(--font);
+  cursor: default;
+}
+
+.unread-chip:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.unread-chip svg {
+  fill: #fff;
+}
+
+.ask-clove {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 10px;
+  z-index: 2;
+}
+
+.ask-clove[hidden] {
+  display: none;
+}
+
+.ask-field {
+  width: 100%;
+  height: 26px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font: 500 11.5px var(--font);
+  padding: 0 12px;
+  outline: none;
+}
+
+.ask-field::placeholder {
+  color: var(--dim-3);
+}
+
+.ask-field:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+}

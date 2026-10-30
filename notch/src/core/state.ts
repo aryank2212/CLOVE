@@ -216,6 +216,29 @@ export interface CloveNotice {
   text: string;
 }
 
+/** CLOVE fork: one thing CLOVE saw (a message, a call), kept for the "While you were busy" inbox. */
+export interface CloveLogItem {
+  app: string;
+  kind: CloveNotice["kind"];
+  sender: string;
+  text: string;
+  at: number;
+}
+
+/** What the inbox says: how many calls CLOVE took, missed calls, messages, replies; and the newest item. */
+export function inboxSummary(log: CloveLogItem[]): { calls: number; missed: number; messages: number; replied: number; newest: CloveLogItem | null } {
+  let calls = 0, missed = 0, messages = 0, replied = 0;
+  log.forEach((item, i) => {
+    if (item.kind === "ended") calls++;
+    else if (item.kind === "message") messages++;
+    else if (item.kind === "replied") replied++;
+    else if (item.kind === "ringing" &&
+      !log.slice(i + 1).some((x) => (x.kind === "call" || x.kind === "ended") && x.sender === item.sender)) missed++;
+  });
+  const newest = [...log].reverse().find((x) => x.kind !== "call") ?? null;
+  return { calls, missed, messages, replied, newest };
+}
+
 class AppState {
   mode: IslandMode = "hidden";
   view: IslandViewName = "overview";
@@ -245,6 +268,10 @@ class AppState {
   pendingApproval: ApprovalInfo | null = null;
   /** CLOVE fork: the message or call the banner shows (a CloveNotification), like a phone's notification. */
   notice: CloveNotice | null = null;
+  /** CLOVE fork: what came in since he last opened the inbox (newest last, at most 50). */
+  cloveLog: CloveLogItem[] = [];
+  /** CLOVE fork: unread messages per app ("WhatsApp" -> 3), for the header's chips. */
+  cloveUnread: Record<string, number> = {};
   /** CLOVE fork: CLOVE isn't listening (the header's mic button); null while CLOVE isn't running. */
   cloveMuted: boolean | null = null;
   /** The pill that was in front when the card came up; it comes back after. */
