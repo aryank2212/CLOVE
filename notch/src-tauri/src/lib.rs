@@ -36,6 +36,7 @@ mod shortcuts;
 mod sounds;
 mod speech;
 mod spotify;
+mod streaks;
 mod tray;
 mod update;
 mod voice;
@@ -880,6 +881,7 @@ pub fn run() {
             controls::media_state,
             controls::media_control,
             controls::open_in_chrome,
+            streaks::streaks_fetch,
             set_paused,
             shortcuts_status,
             shortcuts_suspend,
