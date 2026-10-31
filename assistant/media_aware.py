@@ -6,7 +6,9 @@ with "Rose" in it can even wake CLOVE). While something else is playing:
   - Only a clear "Clove, ..." / "Hey Rose, ..." at the start of what he says wakes CLOVE (a name sung somewhere
     in a line doesn't), and a notification no longer wakes it by itself.
   - Once awake, it falls asleep again after MEDIA_WAKE_WINDOW_S seconds of quiet instead of the usual window.
-  - While it is awake (listening to him or speaking), the music is turned down to DUCK_TO, and put back after.
+
+It never changes the music's volume: an app's volume set by anyone is remembered by the desktop (WirePlumber) for
+that app's next stream, so turning it down "for a moment" left Chrome nearly silent for good.
 
 "Playing" means a media player says so (MPRIS: Spotify, a YouTube tab, mpv...) or another app's sound stream has
 been running for a couple of seconds. CLOVE's own voice, Clove Notch's sounds and call audio don't count.
@@ -21,7 +23,6 @@ import time
 log = logging.getLogger("clove.media")
 POLL_S = 1.5
 MEDIA_WAKE_WINDOW_S = 10.0
-DUCK_TO = 0.3                       # the music's volume while CLOVE listens or speaks (of what it was)
 OURS = ("clove-notch", "clove", "pipewire alsa [python")   # application names that are CLOVE's own sound
 
 
@@ -79,7 +80,6 @@ class MediaWatch:
         self.playing = False
         self.apps: list[str] = []
         self.seen_since = 0.0             # a foreign stream has been running since (it must last, not a ding)
-        self.ducked: dict[int, list[int]] = {}   # stream -> its volume before CLOVE turned it down
 
     def on(self) -> bool:
         prefs = getattr(getattr(self.a, "dashboard", None), "prefs", {}) or {}
@@ -99,48 +99,12 @@ class MediaWatch:
         self.playing = playing
         self.apps = sorted({s["app"] for s in streams})
 
-    # ---- turning the music down while CLOVE listens or speaks -----------------------------------
-    def want_duck(self) -> bool:
-        a = self.a
-        if not self.playing or a.muted:
-            return False
-        wake = getattr(a, "wake", None)
-        return bool(wake and wake.enabled and wake.awake()) or a.speaking()
-
-    def duck(self, streams: list[dict]):
-        for s in streams:
-            if s["index"] in self.ducked or not s["volume"]:
-                continue
-            self.ducked[s["index"]] = s["volume"]
-            low = [str(max(0, int(v * DUCK_TO))) for v in s["volume"]]
-            _run("pactl", "set-sink-input-volume", str(s["index"]), *low)
-        if streams and len(self.ducked) and not getattr(self, "_logged_duck", False):
-            log.info("music turned down while CLOVE listens")
-            self._logged_duck = True
-
-    def unduck(self):
-        if not self.ducked:
-            return
-        for index, vol in self.ducked.items():
-            _run("pactl", "set-sink-input-volume", str(index), *[str(v) for v in vol])
-        self.ducked = {}
-        self._logged_duck = False
-        log.info("music back up")
-
     async def run(self):
-        n = 0
-        try:
-            while True:
-                await asyncio.sleep(0.5)
-                n += 1
-                if n % 3 == 0:                      # what's playing: every 1.5 s
-                    streams = await asyncio.to_thread(foreign_streams)
-                    player = await asyncio.to_thread(mpris_playing) if not streams else False
-                    self.update(streams, player, time.monotonic())
-                    self._streams = streams
-                if self.want_duck():
-                    await asyncio.to_thread(self.duck, getattr(self, "_streams", []))
-                elif self.ducked:
-                    await asyncio.to_thread(self.unduck)
-        finally:
-            self.unduck()                            # never leave his music quiet
+        while True:
+            await asyncio.sleep(POLL_S)
+            try:
+                streams = await asyncio.to_thread(foreign_streams)
+                player = await asyncio.to_thread(mpris_playing) if not streams else False
+                self.update(streams, player, time.monotonic())
+            except Exception as e:
+                log.warning("media watch: %s", e)

@@ -1,5 +1,5 @@
 """Music on the speakers (media_aware.py): CLOVE tells it from its own sound, wakes only to its name said clearly
-at the start, sleeps sooner, ignores notifications as a reason to listen, and turns the music down while awake."""
+at the start, sleeps sooner, ignores notifications as a reason to listen, and never touches the music's volume."""
 import json
 import os
 import sys
@@ -40,7 +40,7 @@ check("with its volume", found and found[0]["volume"] == [65536, 65536])
 check("bad output is nothing", M.foreign_streams("not json") == [])
 
 # ---- playing: a player says so, or a stream that lasts (not a notification ding) --------------------------
-a = SimpleNamespace(dashboard=SimpleNamespace(prefs={}), muted=False, speaking=lambda: False)
+a = SimpleNamespace(dashboard=SimpleNamespace(prefs={}))
 w = M.MediaWatch(a)
 t0 = 100.0
 w.update(found, False, t0)
@@ -79,24 +79,8 @@ check("but anything he does does", g.awake_until > time.monotonic())
 w.playing = False
 check("no music: the usual window", g.window() == config.WAKE_WINDOW_S)
 
-# ---- turning the music down and back ------------------------------------------------------------------
-calls = []
-M._run = lambda *args, **k: calls.append(args) or ""
-w.playing = True
-a.wake = SimpleNamespace(enabled=True, awake=lambda: True)
-check("awake with music: turn it down", w.want_duck())
-w.duck(found)
-check("to 30%", calls[-1] == ("pactl", "set-sink-input-volume", "4", str(int(65536 * M.DUCK_TO)), str(int(65536 * M.DUCK_TO))))
-n = len(calls)
-w.duck(found)
-check("once", len(calls) == n)
-w.unduck()
-check("and back to what it was", calls[-1] == ("pactl", "set-sink-input-volume", "4", "65536", "65536") and not w.ducked)
-a.muted = True
-check("muted CLOVE doesn't touch the music", not w.want_duck())
-a.muted = False
-a.wake = SimpleNamespace(enabled=True, awake=lambda: False)
-check("asleep: the music stays as it is", not w.want_duck())
+# ---- the music's volume is never touched -------------------------------------------------------------------
+check("no volume changes at all", not hasattr(w, "duck") and not hasattr(M, "DUCK_TO"))
 
 print("ALL PASSED" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)
