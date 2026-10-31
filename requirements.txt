@@ -1,0 +1,22 @@
+google-genai>=2.32
+websockets>=16
+sounddevice>=0.5
+numpy>=2
+python-dotenv>=1
+pillow>=11
+python-xlib>=0.33; sys_platform == "linux"
+# macOS: the on-screen pointer, media keys and screen size (Cocoa/Quartz from Python)
+pyobjc-framework-Cocoa>=11; sys_platform == "darwin"
+pyobjc-framework-Quartz>=11; sys_platform == "darwin"
+# local Qwen brain (see scripts/install_local.sh):
+ollama>=0.6
+faster-whisper>=1.2
+kokoro-onnx>=0.4
+nvidia-cublas-cu12; sys_platform != "darwin"
+nvidia-cudnn-cu12>=9,<10; sys_platform != "darwin"
+
+# Windows
+pywin32>=306; sys_platform == "win32"
+psutil>=5.9; sys_platform == "win32"
+pycaw>=20240210; sys_platform == "win32"
+comtypes>=1.4; sys_platform == "win32"

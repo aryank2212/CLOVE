@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><style>
+/* Same tokens as the CLOVE window (docs/DESIGN.md). */
+:root{color-scheme:dark;--panel:#0e0f11;--card:#18191c;--line:rgba(255,255,255,.07);--text:#f5f6f8;--secondary:#8e939c;--muted:#6b7079;
+--ok:#34d399;--crit:#ff453a;--crit-text:#ff8a80;--font:system-ui,"Segoe UI",sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:300px;padding:14px;background:var(--panel);color:var(--text);font:400 13px/1.45 var(--font);-webkit-font-smoothing:antialiased}
+b{font:700 13px var(--font);letter-spacing:.1em}
+#s{display:flex;align-items:center;gap:8px;margin:12px 0;padding:9px 12px;border-radius:11px;background:rgba(255,255,255,.05);color:var(--secondary);font-size:12.5px}
+#s::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
+#s.on::before{background:var(--ok)} #s.off::before{background:var(--crit)}
+h4{font:700 10.5px var(--font);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:4px 2px 6px}
+ul{list-style:none;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:2px 12px}
+li{padding:7px 0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}li+li{border-top:1px solid var(--line)}
+li small{display:block;color:var(--muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bad{color:var(--crit-text)} p{margin-top:10px;color:var(--muted);font-size:11.5px}
+</style><b>CLOVE</b> <span style="color:var(--secondary)">Hands</span><div id="s">Checking…</div><h4>Recent actions</h4><ul id="log"><li><small>Nothing yet</small></li></ul>
+<p>It connects by itself while CLOVE is running on this PC.</p><script src="popup.js"></script>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLOVE</title>
+<link rel="stylesheet" href="/clove.css">
+</head>
+<body>
+<div class="app">
+  <nav class="side" aria-label="CLOVE">
+    <div class="brand"><canvas id="logo" aria-hidden="true"></canvas><span class="wordmark">CLOVE</span></div>
+    <button class="find" id="open-palette" title="Commands (Ctrl+K)">
+      <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><span>Commands</span><kbd>Ctrl K</kbd></button>
+
+    <div class="group">Assistant</div>
+    <button class="item" data-view="chat"><svg viewBox="0 0 16 16"><path d="M2.5 4.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7l-3 2.5v-2.5h0a2 2 0 0 1-1.5-2Z"/></svg><span>Conversation</span></button>
+    <button class="item" data-view="activity"><svg viewBox="0 0 16 16"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg><span>Activity</span><span class="count hidden" id="act-n"></span></button>
+    <button class="item" data-view="systems"><svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="4.5" rx="1"/><rect x="2.5" y="9" width="11" height="4.5" rx="1"/><path d="M5 4.75h.01M5 11.25h.01"/></svg><span>Systems</span></button>
+    <button class="item" data-view="prefs"><svg viewBox="0 0 16 16"><path d="M3 4h6M12 4h1M3 8h1M7 8h6M3 12h7M13 12h0"/><circle cx="10.5" cy="4" r="1.5"/><circle cx="5.5" cy="8" r="1.5"/><circle cx="11.5" cy="12" r="1.5"/></svg><span>Preferences</span></button>
+
+    <div class="group">Connections</div>
+    <div id="conns"></div>
+
+    <div class="spacer"></div>
+    <div class="status" id="status" aria-live="polite"><i class="dot" id="status-dot"></i><span id="status-tx">Connecting…</span></div>
+    <div class="foot"><span id="ver"></span>
+      <button class="icon" id="to-compact" title="Compact companion (Ctrl+J)" aria-label="Compact companion">
+        <svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><rect x="8" y="8" width="4" height="4" rx=".5"/></svg></button></div>
+  </nav>
+
+  <main class="panel">
+    <section class="view" id="v-chat" aria-label="Conversation">
+      <header class="hero" data-color="#FB923C">
+        <canvas class="backdrop" aria-hidden="true"></canvas>
+        <canvas class="presence" id="presence" title="Click: listen now, or stop speaking"></canvas>
+        <div class="copy">
+          <h1 id="state">Connecting</h1>
+          <p id="substate">Starting up…</p>
+          <div class="actions">
+            <div class="seg" id="brains" role="group" aria-label="Brain">
+              <button data-brain="gemini" title="Gemini Live: hears and speaks in the cloud">Gemini</button>
+              <button data-brain="hybrid" title="Hybrid: local voice, Gemini text (uses less free quota)">Hybrid</button>
+              <button data-brain="qwen" title="Qwen: everything on this PC">Qwen</button>
+            </div>
+            <button class="btn hidden" id="stop" title="Stop speaking (Esc)">Stop speaking</button>
+          </div>
+        </div>
+        <button class="icon compact-only" id="to-full" title="Full window (Ctrl+J)" aria-label="Full window">
+          <svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg></button>
+      </header>
+      <div class="conv">
+        <div class="thread">
+          <div class="feed" id="feed" aria-live="polite"></div>
+          <div class="mini" id="mini"></div>
+          <div class="composer">
+            <textarea id="input" rows="1" placeholder="Ask CLOVE, or give it a task…" aria-label="Message to CLOVE"></textarea>
+            <div class="bar">
+              <span class="route" id="route"></span>
+              <button class="btn" id="mic" title="Microphone on/off (Ctrl+M)"><span class="mic-lvl"><i id="mic-bar"></i></span><span id="mic-tx">Mic on</span></button>
+              <button class="btn primary" id="send" title="Send (Enter)">Send</button>
+            </div>
+          </div>
+        </div>
+        <aside class="context" aria-label="Context">
+          <div class="label">Task</div><div class="card" id="task-body"></div>
+          <div class="label">This PC <span class="fresh" id="tel-fresh"></span></div><div class="card" id="metrics"></div>
+          <div class="label">Services <span class="fresh" id="svc-fresh"></span>
+            <button class="icon small" data-refresh title="Check now" aria-label="Check services now"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5v3h-3"/></svg></button></div>
+          <div class="card" id="services"><div class="quiet">Checking…</div></div>
+          <div class="label">Workspace <span class="fresh" id="ws-src"></span></div><div class="card" id="workspace"></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="view" id="v-activity" aria-label="Activity"><div class="page">
+      <header class="hero compact" data-color="#3B9EFF"><canvas class="backdrop" aria-hidden="true"></canvas>
+        <div class="copy"><h1>Activity</h1><p>Plans, background jobs, and everything CLOVE did this session.</p></div></header>
+      <div class="label">Current plan</div><div id="tasks-plan"></div>
+      <div class="label">Background jobs</div><div class="card" id="tasks-jobs"></div>
+      <div class="label">Timeline</div><div class="card" id="timeline"></div>
+    </div></section>
+
+    <section class="view" id="v-systems" aria-label="Systems"><div class="page">
+      <header class="hero compact" data-color="#34D399"><canvas class="backdrop" aria-hidden="true"></canvas>
+        <div class="copy"><h1>Systems</h1><p>This PC, the services CLOVE depends on, and the machines it can reach.</p></div></header>
+      <div class="cols2">
+        <div><div class="label">This PC <span class="fresh" id="sys-fresh"></span></div><div class="card" id="sys-metrics"></div></div>
+        <div><div class="label">Storage</div><div class="card"><div id="sys-disks"></div><div class="quiet" id="sys-extra"></div></div></div>
+      </div>
+      <div class="label">Services <span class="fresh" id="svc-fresh2"></span>
+        <button class="icon small" data-refresh title="Check now" aria-label="Check services now"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5v3h-3"/></svg></button></div>
+      <div class="card" id="svc-full"></div>
+      <div class="label">Workspace</div><div class="card" id="workspace2"></div>
+      <div class="label">Machine check</div>
+      <div class="card"><div class="btn-row" id="check-btns"></div><pre class="out" id="check-out"></pre></div>
+    </div></section>
+
+    <section class="view" id="v-prefs" aria-label="Preferences"><div class="page">
+      <header class="hero compact" data-color="#8E939C"><canvas class="backdrop" aria-hidden="true"></canvas>
+        <div class="copy"><h1>Preferences</h1><p>Brain, voice, window, workspace and what CLOVE may do on its own.</p></div></header>
+      <div id="settings"></div>
+    </div></section>
+  </main>
+</div>
+
+<div class="palette" id="palette" role="dialog" aria-label="Commands" aria-modal="true">
+  <div class="box"><input id="pal-in" placeholder="Type a command…" autocomplete="off" aria-label="Search commands"><ul id="pal-list" role="listbox"></ul></div>
+</div>
+<div class="toasts" id="toasts" role="status"></div>
+<script src="/clove.js"></script>
+</body>
+</html>
