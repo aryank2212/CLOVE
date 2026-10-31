@@ -182,6 +182,8 @@ async function main() {
   // what they show is redrawn; the toggles and the music are asked of Rust while the Controls page is open,
   // and now and then otherwise (the compact notch shows what's playing, or a recording).
   Tools.onRing = () => island.alert("controls");
+  // A click on Clove Notch while music plays opens the player.
+  State.openOn = () => (Tools.media?.playing ? "controls" : null);
   window.addEventListener("clove-fold", () => island.collapse());
   let toolTicks = 0;
   const toolsTick = () => {

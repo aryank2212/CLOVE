@@ -65,6 +65,17 @@ export const PANEL_H = 320;
 export const NOTCH_W = 184;
 export const NOTCH_H = 32;
 export const COMPACT_W = 288; // NOTCH_W + 104
+
+/** CLOVE fork: the compact width he picked in Settings (COMPACT_W until then). */
+let compactW = COMPACT_W;
+export const COMPACT_MIN = 240;
+export const COMPACT_MAX = 520;
+export function setCompactWidth(w: number) {
+  compactW = Number.isFinite(w) ? Math.round(Math.min(COMPACT_MAX, Math.max(COMPACT_MIN, w))) : COMPACT_W;
+}
+export function compactWidth(): number {
+  return compactW;
+}
 export const EXPANDED_W = 640;
 
 export const ROUNDED_CORNER = 14; // hidden / compact
@@ -133,7 +144,7 @@ export function islandSize(
       // slides into the top edge of the screen instead of sitting there as a bar.
       return { w: NOTCH_W, h: 0 };
     case "compact":
-      return { w: COMPACT_W, h: NOTCH_H };
+      return { w: compactW, h: NOTCH_H };
     case "expanded": {
       const h = view === "prompt" ? chatPromptHeight(chatCount) : VIEW_LAYOUTS[view].height;
       return { w: EXPANDED_W, h };

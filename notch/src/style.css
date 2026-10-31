@@ -3149,66 +3149,166 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
   background: transparent;
   color: var(--ink);
   text-align: left;
-  padding: 2px 4px 2px 8px;
+  padding: 0 2px 0 4px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   cursor: default;
-  border-radius: 12px;
-  transition: background 0.15s;
 }
 
-.shelf-spare.inbox:hover:not(.quiet) {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.inbox-title {
+.nf-counts {
   font: 600 9.5px var(--font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dim-3);
-}
-
-.inbox-counts {
-  font: 600 13px var(--font);
-  color: var(--ink);
+  letter-spacing: 0.02em;
+  color: var(--dim-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-left: 2px;
 }
 
-.shelf-spare.quiet .inbox-counts {
-  color: var(--dim-2);
+.nf-stack {
+  position: relative;
+  height: 78px;
 }
 
-.inbox-newest {
+.nf-card,
+.nf-layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.075);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(20px) saturate(1.4);
+}
+
+.nf-card {
+  z-index: 3;
+  height: 68px;
+  box-sizing: border-box;
+  padding: 8px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1), opacity 220ms ease, background 200ms ease;
+  animation: nf-in 420ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .shelf-spare.inbox:not(.quiet):hover .nf-card {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.shelf-spare.inbox:not(.quiet):active .nf-card {
+  transform: scale(0.97);
+}
+
+.shelf-spare.inbox.read .nf-card,
+.shelf-spare.inbox.read .nf-layer {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.96);
+}
+
+.nf-layer {
+  height: 68px;
+  transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1), opacity 220ms ease;
+}
+
+.nf-layer.l1 {
+  z-index: 2;
+  transform: translateY(5px) scale(0.94);
+  opacity: 0.7;
+}
+
+.nf-layer.l2 {
+  z-index: 1;
+  transform: translateY(10px) scale(0.88);
+  opacity: 0.4;
+}
+
+@keyframes nf-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+    filter: blur(2px);
+  }
+}
+
+.nf-top {
   display: flex;
   align-items: center;
-  gap: 5px;
-  min-width: 0;
-  font: 500 11px var(--font);
-  color: var(--dim-2);
-  white-space: nowrap;
+  gap: 6px;
 }
 
-.inbox-newest svg {
+.nf-icon {
   flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font: 700 10px var(--font);
+}
+
+.nf-icon svg {
+  width: 11px;
+  height: 11px;
   fill: #fff;
 }
 
-.inbox-newest b {
-  flex: none;
-  max-width: 45%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--ink);
-  font-weight: 600;
+.nf-app {
+  font: 600 8.5px var(--font);
+  letter-spacing: 0.05em;
+  color: var(--dim);
 }
 
-.inbox-newest span {
+.nf-ago {
+  margin-left: auto;
+  font: 500 9px var(--font);
+  color: var(--dim-3);
+}
+
+.nf-who {
+  margin-top: 3px;
+  font: 700 11.5px var(--font);
+  color: #fff;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.nf-text {
+  font: 500 10.5px var(--font);
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nf-empty {
+  height: 68px;
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.09);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--dim-3);
+}
+
+.nf-empty b {
+  font: 600 11px var(--font);
+  color: var(--dim);
+}
+
+.nf-empty span {
+  font: 500 9.5px var(--font);
 }
 
 .unread-chips {

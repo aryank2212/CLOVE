@@ -8,8 +8,7 @@ import {
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
   islandSize,
   QUESTION_PICKER_H,
-  type BotEmoteName, type IslandMode, type IslandViewName,
-} from "../core/layout";
+  type BotEmoteName, type IslandMode, type IslandViewName, setCompactWidth, COMPACT_W } from "../core/layout";
 import { FlowBridge } from "../core/flow";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
@@ -1387,6 +1386,7 @@ export class Island {
     Sound.setVolume(State.settings.soundVolume);
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
     this.fsm.openOnHover = State.settings.openOnHover;
+    setCompactWidth(State.settings.compactWidth ?? COMPACT_W);
     this.applyKeepVisible();
     State.notify();
     // ponytail: one timer for the life of the window; a minute is the clock's finest tick.

@@ -107,6 +107,8 @@ export interface Settings {
   showClock: boolean;
   /** CLOVE fork: the compact island stays on screen instead of hiding after a minute. */
   keepVisible: boolean;
+  /** CLOVE fork: the compact island's width (240–520). */
+  compactWidth: number;
   absenceInterval: number;
   /** Declared pills next to the main one (at most 4), in the order they were added. */
   activeIntegrations: string[];
@@ -175,6 +177,7 @@ export const DEFAULT_SETTINGS: Settings = {
   openOnHover: false,
   showClock: false,
   keepVisible: true,
+  compactWidth: 288,
   absenceInterval: 180,
   activeIntegrations: [
     "integration_resend", "integration_n8n", "integration_vercel", "integration_github",
@@ -553,8 +556,13 @@ class AppState {
    * What Clove Notch opens on. A card waiting for an answer comes first, so
    * reopening a folded island shows it again (Mac #117, #290).
    */
+  /** CLOVE fork: a view that wins when Clove Notch opens (main.ts: the music player while something plays). */
+  openOn: (() => IslandViewName | null) | null = null;
+
   defaultView(): IslandViewName {
     if (this.pendingApproval) return this.pendingApproval.questions ? "question" : "approval";
+    const preferred = this.openOn?.();
+    if (preferred) return preferred;
     return this.tasks.length === 0 ? "empty" : "overview";
   }
 }
