@@ -16,6 +16,7 @@ from jobs import Job
 
 log = logging.getLogger("clove")
 DEDUPE_SECONDS = 25
+RESEND_GUARD_S = 60                  # the same message to the same chat is not sent again within this
 # A short spoken/typed answer while a plan waits for approval (checked in code, so a "yes" is never lost).
 YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|ok(ay)?|go ahead|go for it|do it|approved?|proceed|confirm(ed)?|"
                  r"please do|sounds good|alright|haan?|kar do|theek hai)\b", re.I)
@@ -338,6 +339,14 @@ DECLARATIONS = [
     _fn("list_scenes", "List smart home scenes."),
     _fn("explain_contract", "Explain a contract clause.", {"clause": _s("STRING")}, ["clause"]),
     _fn("weather_outfit", "Weather + outfit suggestion.", {"location": _s("STRING")}),
+    _fn("notifications", "The PC's recent notifications (messages on WhatsApp, Instagram, X, LinkedIn..., and others), "
+        "newest last. For 'what did I miss', 'any messages', 'who texted me'.", {"platform": _s("STRING", "only this app, e.g. WhatsApp")}),
+    _fn("instagram_reply", "Reply to someone who messaged him on Instagram (by their name or @username), through "
+        "Instagram's API: no browser needed. Only within 24 hours of their last message.",
+        {"who": _s("STRING", "their name or @username, as announced"), "text": _s("STRING")}, ["who", "text"]),
+    _fn("away", "He's leaving the PC (on=true: 'I'm heading out', 'I'll be away') or back (on=false). While away, "
+        "message notifications are forwarded to his Telegram. It also ends by itself when he uses the PC again.",
+        {"on": _s("BOOLEAN")}, ["on"]),
     _fn("find_jobs", "Find jobs.", {"role": _s("STRING"), "location": _s("STRING"), "skills": _s("STRING")}, ["role"]),
     _fn("cover_letter", "Draft a cover letter.", {"role": _s("STRING"), "company": _s("STRING"), "resume": _s("STRING")}, ["role","company"]),
     _fn("palace_remember", "Remember item at a location.", {"location": _s("STRING"), "item": _s("STRING")}, ["location","item"]),
@@ -450,7 +459,7 @@ LOCAL_TOOLS = {                 # tool -> parameters it keeps (None = all). Thin
     "find_restaurant": ["cuisine","location"], "track_package": ["tracking_number","carrier"],
     "travel_plan": ["destination"], "log_habit": ["name","note"], "habit_status": ["name"],
     "list_habits": None, "summarize_document": ["path"], "run_scene": ["name"],
-    "list_scenes": None, "explain_contract": ["clause"], "weather_outfit": ["location"],
+    "list_scenes": None, "explain_contract": ["clause"], "weather_outfit": ["location"], "notifications": ["platform"], "away": ["on"], "instagram_reply": ["who"],
     "find_jobs": ["role","location"], "cover_letter": ["role","company"],
     "palace_remember": ["location","item"], "palace_recall": ["location"], "palace_list": None,
     "guide": None, "pair_mode": None, "answer_agent": None, "dictate": None, "type_text": None, "focus": None, "learned_shortcuts": None, "second_opinion": None,
@@ -611,6 +620,8 @@ class Toolbox:
     def __init__(self, clove):
         self.j = clove
         self.recent: dict[str, tuple[float, str]] = {}
+        self.sends: dict[tuple, float] = {}  # (chat, text) -> when it was sent: the same message is never sent twice
+        self.wa_open = ""                    # the WhatsApp chat wa_chat last opened
         self.calls: dict[str, int] = {}      # tool+args -> times called during the current user request
         self.utterance = 0
         self.actions_since_step = 0          # real actions since the last update_step
@@ -869,7 +880,20 @@ class Toolbox:
         if act == "group":
             args["tabs"] = a.get("tab") or a.get("text") or "current"
         slow = act in ("batch", "open", "navigate", "reload", "wa_chat", "wa_send", "back", "forward", "wait_for", "click", "fill")
+        send_key = None
+        if act == "wa_send" or (act == "type" and a.get("submit")):
+            send_key = (self.wa_open if act == "wa_send" else a.get("field", ""), " ".join(str(a.get("text", "")).split()))
+            when = self.sends.get(send_key)
+            if when is not None and time.monotonic() - when < RESEND_GUARD_S:
+                return (f"ALREADY SENT {int(time.monotonic() - when)}s ago: this exact message, to the same chat. "
+                        "Not sent again. Don't retry; tell him it was sent.")
         out = await bridge.call(act, timeout=50 if slow else 25, **args)
+        if act == "wa_chat" and out.startswith("opened WhatsApp chat"):
+            self.wa_open = a.get("name", "")
+        if send_key and not is_failure(out):
+            now = time.monotonic()
+            self.sends = {k: t for k, t in self.sends.items() if now - t < RESEND_GUARD_S}
+            self.sends[send_key] = now
         if out.startswith("error: the Chrome extension isn't connected"):
             from browser_bridge import SEEN
             if SEEN.exists():                     # installed, just not connected this moment: never nag about installing
@@ -1210,6 +1234,12 @@ class Toolbox:
         if name == "explain_contract":
             import contract_explainer
             return await contract_explainer.explain(a.get("clause",""))
+        if name == "instagram_reply":
+            return await asyncio.to_thread(self.j.instagram.reply, a.get("who", ""), a.get("text", ""))
+        if name == "away":
+            return self.j.away.set(bool(a.get("on", True)))
+        if name == "notifications":
+            return self.j.messages.listing(a.get("platform", ""))
         if name == "weather_outfit":
             import weather_outfit
             return await weather_outfit.suggest(a.get("location",""))

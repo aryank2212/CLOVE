@@ -32,6 +32,12 @@ def wake_pattern(names: list[str]) -> re.Pattern:
     return re.compile(rf"^\W*(?:(?:hey|hi|ok|okay|hello|oi|yo|listen)\W+)?(?:{alts})\b|\b(?:{alts})\W*$", re.I)
 
 
+def strict_pattern(names: list[str]) -> re.Pattern:
+    """While music plays: only the name at the very start ("Clove, ...", "hey Rose ..."), never sung mid-line."""
+    alts = "|".join(NAMES.get(n, re.escape(n)) for n in names)
+    return re.compile(rf"^\W*(?:(?:hey|hi|ok|okay|hello|oi|yo|listen)\W+)?(?:{alts})\b", re.I)
+
+
 def _agent_waiting() -> bool:
     import ctl
     return bool(ctl.QUESTIONS)
@@ -42,6 +48,7 @@ class WakeGate:
         self.a = a
         self.enabled = config.WAKE_WORD
         self.pattern = wake_pattern(config.WAKE_NAMES)
+        self.strict = strict_pattern(config.WAKE_NAMES)
         self.awake_until = 0.0
         self.preroll = collections.deque(maxlen=12)       # ~380 ms before the first syllable
         self.utt = bytearray()
@@ -55,6 +62,18 @@ class WakeGate:
             self.recogniser = Recogniser.shared()
 
     # ---- state ---------------------------------------------------------------------------
+    def music(self) -> bool:
+        """Music or a video is playing on the speakers (media_aware.py)."""
+        media = getattr(self.a, "media", None)
+        return bool(media and media.playing)
+
+    def window(self) -> float:
+        """How long he stays awake after the last word: shorter while music plays, so the song isn't heard as him."""
+        if self.music():
+            import media_aware
+            return min(config.WAKE_WINDOW_S, media_aware.MEDIA_WAKE_WINDOW_S)
+        return config.WAKE_WINDOW_S
+
     def awake(self, now: float | None = None) -> bool:
         if not self.enabled:
             return True
@@ -63,13 +82,15 @@ class WakeGate:
         engaged = (a.speaking() or a.awaiting or a.busy or a.calls.audible()
                    or (tools.plan and tools.plan.get("approval") == "pending") or _agent_waiting())
         if engaged:
-            self.awake_until = max(self.awake_until, now + config.WAKE_WINDOW_S)
+            self.awake_until = max(self.awake_until, now + self.window())
         return now < self.awake_until
 
     def wake(self, why: str):
+        if why == "notification" and self.music() and not self.awake():
+            return                                  # with music on, a message waits for "Clove, ..." instead
         if not self.awake():
             log.info("awake (%s)", why)
-        self.awake_until = time.monotonic() + config.WAKE_WINDOW_S
+        self.awake_until = time.monotonic() + self.window()
 
     def sleep(self):
         self.awake_until = 0.0
@@ -86,7 +107,7 @@ class WakeGate:
         """Called for every mic chunk. Returns the chunks to give the brain, or None while asleep."""
         if self.awake(now):
             if voice:
-                self.awake_until = now + config.WAKE_WINDOW_S
+                self.awake_until = now + self.window()
             self.in_utt = False
             return chunks
         data = b"".join(chunks)
@@ -116,10 +137,11 @@ class WakeGate:
             segs, _ = model.transcribe(x, beam_size=1, vad_filter=False, without_timestamps=True,
                                        condition_on_previous_text=False, initial_prompt=", ".join(config.WAKE_NAMES).title())
             text = " ".join(s.text for s in segs).strip()
-            if text and self.pattern.search(text):
+            pattern = self.strict if self.music() else self.pattern
+            if text and pattern.search(text):
                 self._woken(pcm, repr(text))
             elif text:
-                log.debug("asleep, ignored: %r", text)
+                log.debug("asleep, ignored%s: %r", " (music playing)" if self.music() else "", text)
         except Exception as e:
             log.warning("wake check failed: %s", e)
         finally:

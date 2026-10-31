@@ -316,7 +316,7 @@ class GeminiBrain:
     def _play(self, pcm: bytes):
         a = self.a
         a.awaiting = False
-        if a.mute_output:
+        if a.mute_output or a.muted:
             return
         a.last_audio = time.monotonic()
         if a.speaker:
@@ -330,6 +330,8 @@ class GeminiBrain:
             a.remember("user", a.user_utt)
             if self.turn_said.strip():
                 a.remember("assistant", self.turn_said)
+        elif self.skip_nudge and self.turn_said.strip():      # a turn it began itself: a message, a job, a reminder
+            log.info("told him: %r", self.turn_said.strip()[:200])
         a.awaiting = False
         a.cap_who = None
         a.mute_output = False

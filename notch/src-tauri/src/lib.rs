@@ -8,6 +8,7 @@ mod clove_chat;
 mod clove_window;
 mod codex_plan;
 mod config_file;
+mod controls;
 mod desktop;
 mod files;
 mod flow;
@@ -18,6 +19,7 @@ mod identity;
 mod integrations;
 mod island;
 mod local_chat;
+mod localsend;
 mod log;
 mod net;
 mod notes;
@@ -35,6 +37,7 @@ mod shortcuts;
 mod sounds;
 mod speech;
 mod spotify;
+mod streaks;
 mod tray;
 mod update;
 mod voice;
@@ -872,6 +875,20 @@ pub fn run() {
             open_settings_window,
             clove_window::clove_window_url,
             clove_window::clove_start,
+            clove_chat::clove_tell,
+            clove_chat::clove_mute,
+            controls::controls_status,
+            controls::controls_action,
+            controls::media_state,
+            controls::media_control,
+            controls::open_in_chrome,
+            streaks::streaks_fetch,
+            localsend::localsend_devices,
+            localsend::localsend_answer,
+            localsend::localsend_send,
+            localsend::localsend_me,
+            localsend::localsend_open,
+            localsend::pick_files,
             set_paused,
             shortcuts_status,
             shortcuts_suspend,
@@ -1025,6 +1042,7 @@ pub fn run() {
             pipe::start(handle.clone());
             phone_link::start_if_enabled(&handle);
             integrations::start(handle.clone());
+            localsend::start(&handle);
             spotify::sync(&handle, &loaded.active_integrations);
             // WhatsApp (experimental): nothing runs unless it is turned on and its pill is active.
             whatsapp::start(&handle, &loaded.active_integrations);

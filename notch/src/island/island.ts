@@ -8,20 +8,25 @@ import {
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
   islandSize,
   QUESTION_PICKER_H,
-  type BotEmoteName, type IslandMode, type IslandViewName,
-} from "../core/layout";
+  type BotEmoteName, type IslandMode, type IslandViewName, setCompactWidth, COMPACT_W } from "../core/layout";
+import { FlowBridge } from "../core/flow";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
+import { Tools, clockText, type LiveActivity } from "../core/tools";
+import { LocalSend } from "../core/localsend";
+import { t } from "../i18n/i18n";
+import { APP_LOGOS } from "../views/logos";
+import { ICONS } from "../views/icons";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
-import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
+import { pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
 import { SeasonCache, parseOutfit } from "../mochi/wardrobe";
 import { UploadCanvas } from "../upload/canvas";
 import { USC, UploadSeq } from "../upload/sequence";
 import { closePlanCard, openPlanColor, planCardOpen } from "../views/usage";
 import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
-import { h } from "../views/dom";
+import { h, svg } from "../views/dom";
 import { IslandStateMachine } from "./fsm";
 import { refreshHookPills } from "./integrations";
 import { DesktopLink } from "./desktop";
@@ -185,6 +190,15 @@ export class Island {
         else void Bridge.openSession(task?.sessionId ?? null, task?.sessionCwd ?? null);
       },
       // The ↗ button — same targets as openAgentTarget() on macOS.
+      tellClove: (text: string) => void Bridge.cloveTell(text),
+      flowAction: (action) => void FlowBridge.pillAction(action),
+      pickFiles: () => void this.pickFiles(),
+      toggleCloveMic: () => {
+        void Bridge.cloveMute("toggle").then((muted) => {
+          State.cloveMuted = muted;
+          State.notify();
+        });
+      },
       openTarget: () => {
         const task = State.focusTask;
         if (!task) return;
@@ -599,6 +613,7 @@ export class Island {
       case "drop": {
         State.fileDragOver = false;
         const path = e.paths?.[0];
+        LocalSend.dropped = e.paths ?? [];              // all of them, for "Send to …" (LocalSend)
         if (!path) {
           this.engine.animateMorph(0);
           this.setView(State.defaultView());
@@ -654,8 +669,31 @@ export class Island {
       });
   }
 
+  /** CLOVE fork: files chosen in the file chooser (Send, or a double-click on the drop page) go the way of a drop. */
+  private picking = false;
+  private async pickFiles() {
+    if (this.picking) return;
+    this.picking = true;
+    // The chooser is a window of its own: Clove Notch stays put while it is up.
+    const wasPinned = State.isPinned;
+    State.isPinned = true;
+    this.fsm.pinned = true;
+    try {
+      const paths = await LocalSend.pick(t("Choose files to send"));
+      if (!paths.length) return;
+      LocalSend.dropped = paths;
+      this.swallow(paths[0]);
+    } finally {
+      State.isPinned = wasPinned;
+      this.fsm.pinned = wasPinned;
+      this.picking = false;
+    }
+  }
+
   /** "Cancel" on the dropped file: forget it, so the chat does not pick it up. */
   private discardDrop() {
+    LocalSend.dropped = [];
+    if (LocalSend.progress?.direction === "out") LocalSend.progress = null;
     State.droppedFile = null;
     State.promptContext = null;
     this.setView(State.defaultView());
@@ -871,6 +909,14 @@ export class Island {
 
   setPointerInside(inside: boolean) {
     this.pointerInside = inside;
+  }
+
+  /** CLOVE fork: he clicked somewhere else: fold to compact, unless he's on Clove Notch or typing in it. */
+  focusElsewhere() {
+    if (State.mode !== "expanded" || State.isPinned || this.pointerInside === true || this.wasInIsland) return;
+    const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
+    if (typing || State.pendingApproval) return;
+    this.collapse();
   }
 
   /** Cursor in window-logical coordinates. */
@@ -1237,18 +1283,7 @@ export class Island {
     // Compact mini grid
     const showGrid = State.mode === "compact";
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
-    if (showGrid) {
-      const others = State.otherTasks.slice(0, 4);
-      const key = others.map((t) => t.id).join("|");
-      if (this.miniGrid.dataset.key !== key) {
-        this.miniGrid.dataset.key = key;
-        this.miniGrid.replaceChildren();
-        for (const t of others) {
-          this.miniGrid.append(createMiniBot(t, 13));
-        }
-        pruneMiniBots();
-      }
-    }
+    if (showGrid) this.syncCompactStatus();
 
     this.updateClock();
 
@@ -1256,16 +1291,112 @@ export class Island {
     this.engine.setState(State.effectiveState);
   }
 
-  /** The clock sits in the middle of the compact island, where the notch is on a Mac. */
+  /** The clock sits in the middle of the compact island, where the notch is on a Mac. CLOVE fork: while something
+   *  runs (a timer, a recording, music…), its live activity takes the clock's place, like a Dynamic Island. */
   private updateClock() {
-    const on = State.mode === "compact" && State.settings.showClock;
+    const live = State.mode === "compact" ? Tools.live() : null;
+    const on = State.mode === "compact" && (State.settings.showClock || live != null);
     this.clockEl.style.opacity = on ? "1" : "0";
     if (!on) return;
+    if (live) {
+      this.showLive(live);
+      return;
+    }
+    if (this.clockEl.dataset.live) {
+      delete this.clockEl.dataset.live;
+      this.clockEl.className = "";
+      this.clockEl.replaceChildren();
+    }
     const now = new Date();
     const date = now.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
     const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const text = `${date}  ${time}`;
     if (this.clockEl.textContent !== text) this.clockEl.textContent = text;
+  }
+
+  /**
+   * CLOVE fork: the compact notch's right side, in place of the four little mascots: the app with unread
+   * messages (its logo and how many), else CLOVE muted (a red mic), else CLOVE listening (three breathing bars).
+   */
+  private syncCompactStatus() {
+    const unread = Object.entries(State.cloveUnread).filter(([, n]) => n > 0);
+    const newest = [...State.cloveLog].reverse().find((x) => x.kind === "message" && (State.cloveUnread[x.app] ?? 0) > 0);
+    const app = newest?.app ?? unread[0]?.[0];
+    const total = unread.reduce((n, [, c]) => n + c, 0);
+    const key = app ? `unread~${app}~${total}` : State.cloveMuted === true ? "muted" : State.cloveMuted === false ? "listening" : "idle";
+    if (this.miniGrid.dataset.key === key) return;
+    this.miniGrid.dataset.key = key;
+    this.miniGrid.className = `status status-${key.split("~")[0]}`;
+    this.miniGrid.replaceChildren();
+    pruneMiniBots();
+    if (app) {
+      const logo = APP_LOGOS[app];
+      this.miniGrid.append(logo ? svg(logo, 15) : h("b", { text: app.slice(0, 1) }),
+        h("span", { class: "status-count", text: total > 9 ? "9+" : String(total) }));
+    } else if (key === "muted") {
+      this.miniGrid.append(svg(ICONS.micOff, 15));
+    } else if (key === "listening") {
+      const bars = h("span", { class: "status-bars" });
+      for (let i = 0; i < 3; i++) bars.append(h("i"));
+      this.miniGrid.append(bars);
+    }
+  }
+
+  /** CLOVE fork: the compact notch's live activity: a mark (pulsing dot, bars, hourglass) and its text. */
+  private showLive(live: NonNullable<LiveActivity>) {
+    const now = Date.now();
+    let mark: string;
+    let text: string;
+    switch (live.kind) {
+      case "ringing":
+        mark = live.label ? "ring-alarm" : "ring-timer";
+        text = live.label ? t("Alarm {0}", { 0: live.label }) : t("Timer done");
+        break;
+      case "recording":
+        mark = "rec";
+        text = clockText(now - live.since);
+        break;
+      case "timer":
+        mark = "timer";
+        text = clockText(Math.max(0, live.endAt - now));
+        break;
+      case "timerPaused":
+        mark = "paused";
+        text = clockText(live.left);
+        break;
+      case "stopwatch":
+        mark = "stopwatch";
+        text = clockText(live.ms);
+        break;
+      case "media":
+        mark = "music";
+        text = live.artist ? `${live.title} · ${live.artist}` : live.title;
+        break;
+    }
+    const el = this.clockEl;
+    if (el.dataset.live !== mark) {
+      el.dataset.live = mark;
+      el.className = `live live-${mark}`;
+      const ringing = mark.startsWith("ring");
+      const m = h("span", { class: "live-mark" });
+      if (mark === "music") for (let i = 0; i < 4; i++) m.append(h("i"));
+      if (ringing) m.append(svg(mark === "ring-alarm" ? ICONS.bell : ICONS.hourglass, 13, { stroke: 2 }));
+      const textEl = h("span", { class: "live-text" });
+      if (ringing) {
+        // A ringing timer or alarm stops right here, without opening Clove Notch.
+        const stop = h("button", { class: "live-stop", text: t("Stop") });
+        stop.addEventListener("click", (e) => {
+          e.stopPropagation();
+          Tools.stopRinging();
+        });
+        stop.addEventListener("pointerdown", (e) => e.stopPropagation());
+        el.replaceChildren(m, textEl, stop);
+      } else {
+        el.replaceChildren(m, textEl);
+      }
+    }
+    const span = el.querySelector(".live-text") as HTMLElement;
+    if (span.textContent !== text) span.textContent = text;
   }
 
   /** Keep Clove Notch on screen: never let the compact island hide itself, and bring it back if it had. */
@@ -1281,6 +1412,7 @@ export class Island {
     Sound.setVolume(State.settings.soundVolume);
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
     this.fsm.openOnHover = State.settings.openOnHover;
+    setCompactWidth(State.settings.compactWidth ?? COMPACT_W);
     this.applyKeepVisible();
     State.notify();
     // ponytail: one timer for the life of the window; a minute is the clock's finest tick.

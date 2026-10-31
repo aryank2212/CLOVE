@@ -140,13 +140,17 @@ class Recogniser:
         except Exception as e:
             log.warning("turn-taking recogniser unavailable (%s); using timing only", e)
 
-    def text(self, pcm: bytes) -> str | None:
+    def text(self, pcm: bytes, language: str | None = None) -> str | None:
+        """language: "hi", "en"... when the call's language is known (faster, and Hindi is never read as Russian);
+        None guesses."""
         if self.model is None:
             return None
         pcm = pcm[-RATE * 2 * 3:]                                       # the ending is all that matters; shorter is faster
         x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768
         segs, _ = self.model.transcribe(x, beam_size=1, vad_filter=False, without_timestamps=True,
-                                        condition_on_previous_text=False)
+                                        condition_on_previous_text=False, language=language,
+                                        max_new_tokens=30)    # the last words are all that matter; uncapped, Hindi
+                                                              # on a quiet line can run on for 10+ s
         return " ".join(s.text for s in segs).strip()
 
 
@@ -157,7 +161,8 @@ class TurnTaker:
     "audio" (forward this frame), "end" (their turn is over), "duck" (they may be interrupting: pause Clove' voice),
     "unduck" (it was only a short sound: carry on), "barge" (they really interrupted: drop what Clove was saying)."""
 
-    def __init__(self, recogniser: Recogniser | None = None):
+    def __init__(self, recogniser: Recogniser | None = None, language: str | None = None):
+        self.language = language                       # the call's language for the recogniser (None: it guesses)
         self.rec = recogniser
         self.floor = 60.0                        # noise floor of the line (RMS)
         self.in_turn = False
@@ -181,7 +186,7 @@ class TurnTaker:
 
     def _decide(self, pcm: bytes, started: float):
         try:
-            text = self.rec.text(pcm) if self.rec else None
+            text = self.rec.text(pcm, self.language) if self.rec else None
         except Exception as e:
             log.debug("recogniser failed: %s", e)
             text = None
@@ -192,7 +197,7 @@ class TurnTaker:
 
     def _check_duck(self, pcm: bytes):
         try:
-            text = self.rec.text(pcm) if self.rec else ""
+            text = self.rec.text(pcm, self.language) if self.rec else ""
         except Exception:
             text = ""
         self.duck_check = "speech" if is_interruption(text or "") else "backchannel"

@@ -50,6 +50,17 @@ ASK_BEFORE_RISKY = _env("ASK_BEFORE_RISKY", "on").lower() != "off"
 # Optional Telegram notifications (for free call-me links)
 TELEGRAM_BOT_TOKEN = _env("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = _env("TELEGRAM_CHAT_ID")
+# CLOVE's own bot for messages it sends you on its own (messages while you're away). Not TELEGRAM_BOT_TOKEN when
+# another program (e.g. Hermes) reads that bot: your replies would go to it. Empty: nothing is forwarded.
+CLOVE_TELEGRAM_BOT_TOKEN = _env("CLOVE_TELEGRAM_BOT_TOKEN")
+# Instagram DMs through Instagram's official API (instagram.py): his Meta app's long-lived token and app secret, and a
+# phrase of his choosing for the webhook setup. Meta reaches IG_WEBHOOK_PORT through a tunnel (every delivery is
+# checked against the app secret).
+IG_ACCESS_TOKEN = _env("IG_ACCESS_TOKEN")
+IG_APP_SECRET = _env("IG_APP_SECRET")
+IG_VERIFY_TOKEN = _env("IG_VERIFY_TOKEN")
+IG_WEBHOOK_HOST = _env("IG_WEBHOOK_HOST", "0.0.0.0")
+IG_WEBHOOK_PORT = int(_env("IG_WEBHOOK_PORT", "8790") or 8790)
 # Full machine access (sudo) on this PC. Set SUDO_PASSWORD in .env (never in code).
 SUDO_PASSWORD = _env("SUDO_PASSWORD")
 # Voice brain: qwen3:8b fits entirely on the 8 GB GPU (~40 tokens/s, a tool call in under a second). The 27B
@@ -157,6 +168,8 @@ FOCUS_DISTRACTIONS = [d.strip() for d in _env("FOCUS_DISTRACTIONS",
 # Text or voice-note Clove from your phone via your Telegram bot (TELEGRAM_BOT_TOKEN/CHAT_ID). Off by default: a bot
 # token can only be polled by one program, so leave it off if another service (e.g. Hermes) reads the same bot.
 PHONE_INBOX = _env("PHONE_INBOX", "off").lower() == "on"
+# Away from the PC (screen locked, or pointer and window still this long): message notifications go to Telegram too.
+AWAY_AFTER_MIN = float(_env("AWAY_AFTER_MIN", "10") or 10)
 # Short chimes: heard you (wake), job done/failed, dictation on/off
 EARCONS = _env("EARCONS", "on").lower() != "off"
 EARCON_VOLUME = float(_env("EARCON_VOLUME", "0.18"))
