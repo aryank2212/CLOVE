@@ -196,7 +196,7 @@ async function main() {
   State.subscribe(() => {
     // Looking at the drop zone or a dropped file: ask who's around.
     const v = State.mode === "expanded" ? State.view : "";
-    if (v !== lsView && (v === "upload" || v === "choose")) void LocalSend.refresh();
+    if (v !== lsView && (v === "upload" || v === "choose" || v === "receive")) void LocalSend.refresh();
     lsView = v;
   });
   window.setTimeout(() => void LocalSend.refresh(), 4000);

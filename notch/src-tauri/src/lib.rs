@@ -888,6 +888,7 @@ pub fn run() {
             localsend::localsend_send,
             localsend::localsend_me,
             localsend::localsend_open,
+            localsend::pick_files,
             set_paused,
             shortcuts_status,
             shortcuts_suspend,

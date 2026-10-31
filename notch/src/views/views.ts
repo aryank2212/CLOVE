@@ -54,6 +54,8 @@ export interface ViewActions {
   toggleCloveMic(): void;
   /** CLOVE fork: what the bottom bar's buttons did, now in the header: dictate, note (record a call), hub. */
   flowAction(action: "dictate" | "note" | "hub"): void;
+  /** CLOVE fork: the file chooser; what he picks is handled like a drop. */
+  pickFiles(): void;
   decide(d: "allow" | "deny"): void;
   /** Answers the question Claude Code asked: question text → chosen label. */
   answer(answers: Record<string, string | string[]>): void;
@@ -1055,7 +1057,7 @@ export function buildViews(
   map.set("note", buildNote());
   map.set("settings", buildSettings(actions));
   map.set("prompt", buildPrompt(onChatHeightChange));
-  map.set("upload", buildUpload());
+  map.set("upload", buildUpload(actions));
   map.set("uploading", buildUploading());
   map.set("choose", buildChoose(actions));
   map.set("recap", buildRecap(actions));

@@ -8,7 +8,7 @@ import { h, clear, svg } from "./dom";
 import { ICONS } from "./icons";
 import { State } from "../core/state";
 import type { ViewActions, ViewHost } from "./views";
-import { N_, t, tl } from "../i18n/i18n";
+import { t, tl } from "../i18n/i18n";
 import { LocalSend } from "../core/localsend";
 import { deviceStrip, progressLine } from "./localsend";
 
@@ -31,13 +31,19 @@ function dashedFrame(): SVGSVGElement {
   return el;
 }
 
-export function buildUpload(): ViewHost {
+export function buildUpload(actions: ViewActions): ViewHost {
   const frame = dashedFrame();
-  const title = h("div", { class: "drop-title", text: tl("Drop your files here") });
-  const tags = h(
-    "div",
-    { class: "drop-tags" },
-    ...[N_("PDF"), N_("Images"), N_("Code"), N_("Docs")].map((chip) => h("span", { text: tl(chip) })),
+  const title = h("div", { class: "drop-title", text: tl("Drop files here, or double-click to choose") });
+  // CLOVE fork: what he can do from here, at a glance: send (pick files), receive (LocalSend), talk (the chat).
+  const act = (cls: string, label: string, icon: string, run: () => void) => h("button", {
+    class: `drop-act ${cls}`,
+    onclick: (e: Event) => { e.stopPropagation(); run(); },
+    ondblclick: (e: Event) => e.stopPropagation(),
+  }, svg(icon, 15, { stroke: 1.8 }), h("span", { text: label }));
+  const tags = h("div", { class: "drop-acts" },
+    act("send", t("Send"), ICONS.send, () => actions.pickFiles()),
+    act("receive", t("Receive"), ICONS.download, () => actions.setView("receive")),
+    act("talk", t("Talk"), ICONS.bubble, () => actions.setView("prompt")),
   );
   // CLOVE fork: who it can go to over LocalSend, and how Clove Notch shows up there.
   const nearby = h("div", { class: "drop-nearby" });
@@ -48,12 +54,18 @@ export function buildUpload(): ViewHost {
     h("div", { class: "drop-body" }, title, tags, nearby),
   );
   const el = h("div", { class: "view" }, card);
+  // A double-click anywhere on the drop page opens the file chooser.
+  card.addEventListener("dblclick", (e) => {
+    e.stopPropagation();
+    actions.pickFiles();
+  });
   let nearbyKey = "";
 
   return {
     el,
     sync() {
       card.classList.toggle("over", State.fileDragOver);
+      card.classList.toggle("dragging", State.fileDragOver);
       const k = LocalSend.devices.map((d) => d.alias).join("|") + (LocalSend.me?.alias ?? "");
       if (k === nearbyKey) return;
       nearbyKey = k;

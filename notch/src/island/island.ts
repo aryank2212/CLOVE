@@ -192,6 +192,7 @@ export class Island {
       // The ↗ button — same targets as openAgentTarget() on macOS.
       tellClove: (text: string) => void Bridge.cloveTell(text),
       flowAction: (action) => void FlowBridge.pillAction(action),
+      pickFiles: () => void this.pickFiles(),
       toggleCloveMic: () => {
         void Bridge.cloveMute("toggle").then((muted) => {
           State.cloveMuted = muted;
@@ -666,6 +667,27 @@ export class Island {
         Sound.play("error");
         window.setTimeout(() => this.setView(State.defaultView()), 2400);
       });
+  }
+
+  /** CLOVE fork: files chosen in the file chooser (Send, or a double-click on the drop page) go the way of a drop. */
+  private picking = false;
+  private async pickFiles() {
+    if (this.picking) return;
+    this.picking = true;
+    // The chooser is a window of its own: Clove Notch stays put while it is up.
+    const wasPinned = State.isPinned;
+    State.isPinned = true;
+    this.fsm.pinned = true;
+    try {
+      const paths = await LocalSend.pick(t("Choose files to send"));
+      if (!paths.length) return;
+      LocalSend.dropped = paths;
+      this.swallow(paths[0]);
+    } finally {
+      State.isPinned = wasPinned;
+      this.fsm.pinned = wasPinned;
+      this.picking = false;
+    }
   }
 
   /** "Cancel" on the dropped file: forget it, so the chat does not pick it up. */

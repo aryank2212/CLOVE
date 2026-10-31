@@ -104,6 +104,11 @@ class LocalSendState {
     });
   }
 
+  /** The desktop's file chooser; the files picked, or [] if he closed it. */
+  async pick(title: string): Promise<string[]> {
+    return (await call<string[]>("pick_files", { title }).catch(() => null)) ?? [];
+  }
+
   open(path: string) {
     void call<boolean>("localsend_open", { path }).catch(() => false);
   }

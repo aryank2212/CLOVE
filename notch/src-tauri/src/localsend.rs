@@ -1023,3 +1023,68 @@ mod tests {
         assert_eq!(prep.files["a"].size, 3);
     }
 }
+
+// ── Picking files (the desktop's own file chooser) ─────────────────────────────
+
+/// Opens the desktop's file chooser (the XDG portal: the same window every app uses) and returns the files he
+/// picked, or nothing if he closed it.
+#[tauri::command]
+pub async fn pick_files(title: String) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || portal_open_files(&title).unwrap_or_default())
+        .await
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "linux")]
+fn portal_open_files(title: &str) -> Option<Vec<String>> {
+    use dbus::arg::{PropMap, RefArg, Variant};
+    use dbus::blocking::Connection;
+    use dbus::message::MatchRule;
+
+    let conn = Connection::new_session().ok()?;
+    let token = format!("clove{}", random_hex(6));
+    let sender = conn.unique_name().to_string();
+    let sender = sender.trim_start_matches(':').replace('.', "_");
+    let request = format!("/org/freedesktop/portal/desktop/request/{sender}/{token}");
+    let picked: Arc<Mutex<Option<Vec<String>>>> = Arc::new(Mutex::new(None));
+    let sink = picked.clone();
+    // Listen for the answer before asking, so a quick one isn't missed.
+    let rule = MatchRule::new_signal("org.freedesktop.portal.Request", "Response")
+        .with_path(dbus::Path::new(request).ok()?);
+    conn.add_match(rule, move |(code, results): (u32, PropMap), _, _| {
+        let mut out = Vec::new();
+        if code == 0 {
+            if let Some(iter) = results.get("uris").and_then(|v| v.0.as_iter()) {
+                for uri in iter.filter_map(|u| u.as_str().map(str::to_string)) {
+                    if let Some(path) = uri.strip_prefix("file://") {
+                        out.push(percent_decode(path));
+                    }
+                }
+            }
+        }
+        *sink.lock().unwrap() = Some(out);
+        false
+    })
+    .ok()?;
+    let mut options = PropMap::new();
+    options.insert("handle_token".into(), Variant(Box::new(token)));
+    options.insert("multiple".into(), Variant(Box::new(true)));
+    let proxy = conn.with_proxy("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", Duration::from_secs(10));
+    let _: (dbus::Path,) = proxy
+        .method_call("org.freedesktop.portal.FileChooser", "OpenFile", ("", title, options))
+        .ok()?;
+    // He may take his time choosing.
+    let until = Instant::now() + Duration::from_secs(600);
+    while Instant::now() < until {
+        let _ = conn.process(Duration::from_millis(500));
+        if let Some(files) = picked.lock().unwrap().take() {
+            return Some(files);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+fn portal_open_files(_title: &str) -> Option<Vec<String>> {
+    None
+}

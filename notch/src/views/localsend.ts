@@ -86,7 +86,8 @@ export function buildReceive(actions: ViewActions): ViewHost {
       const r = LocalSend.request;
       const p = LocalSend.progress?.direction === "in" ? LocalSend.progress : null;
       const m = LocalSend.message;
-      const k = JSON.stringify([r?.id, p?.state, p ? pct(p) : 0, m?.text, document.documentElement.lang]);
+      const k = JSON.stringify([r?.id, p?.state, p ? pct(p) : 0, m?.text, document.documentElement.lang,
+        LocalSend.devices.map((d) => d.alias), LocalSend.me?.alias]);
       if (k === key) return;
       key = k;
       clear(icon);
@@ -137,7 +138,15 @@ export function buildReceive(actions: ViewActions): ViewHost {
         } else if (p.state !== "running") {
           leaveSoon(4000);
         }
+        return;
       }
+      // Nothing coming yet: ready, and how to send something here.
+      icon.append(svg(ICONS.download, 20, { stroke: 1.8 }));
+      title.textContent = t("Ready to receive");
+      sub.textContent = t("In LocalSend on your phone, pick {0} and send.", { 0: LocalSend.me?.alias ?? "CLOVE" });
+      const near = LocalSend.devices.slice(0, 4).map((d) => d.alias);
+      body.append(h("div", { class: "ls-near" }, svg(ICONS.globe, 10, { stroke: 1.8 }),
+        h("span", { text: near.length ? t("Nearby: {0}", { 0: near.join(", ") }) : t("No devices nearby yet") })));
     },
   };
 }

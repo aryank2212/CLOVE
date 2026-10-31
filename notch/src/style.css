@@ -4824,3 +4824,53 @@ button.wm-city.picking {
   font: 500 10px var(--font);
   color: var(--dim-2);
 }
+
+/* CLOVE fork: Send / Receive / Talk on the drop page */
+.drop-acts {
+  display: flex;
+  gap: 8px;
+  transition: opacity 200ms ease, transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.drop-card.dragging .drop-acts {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+}
+
+.drop-act {
+  height: 32px;
+  padding: 0 14px 0 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 600 11.5px var(--font);
+  cursor: default;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease-out;
+}
+
+.drop-act:active {
+  transform: scale(0.96);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .drop-act.send:hover { background: rgba(43, 124, 255, 0.22); border-color: rgba(43, 124, 255, 0.55); }
+  .drop-act.receive:hover { background: rgba(52, 211, 153, 0.18); border-color: rgba(52, 211, 153, 0.5); }
+  .drop-act.talk:hover { background: rgba(167, 139, 250, 0.2); border-color: rgba(167, 139, 250, 0.5); }
+}
+
+.drop-act.send svg { color: #5aa2ff; }
+.drop-act.receive svg { color: #34d399; }
+.drop-act.talk svg { color: #a78bfa; }
+
+.ls-near {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 500 10px var(--font);
+  color: var(--dim-2);
+}
