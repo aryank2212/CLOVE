@@ -402,6 +402,8 @@ const NOT_TEXT = new Set([
   "Resend", // the service's name (the Mac's "Resend" is a button: send again)
   "Stop", // Claude Code's hook event (the Mac's "Stop" is a button)
   "day", // Intl.RelativeTimeFormat's unit (it writes "2 days ago" in his language itself)
+  "running", // a LocalSend transfer's state
+  "failed", // a LocalSend transfer's state
 ]);
 
 test("no known user-facing English literal outside t() in the views and settings", () => {

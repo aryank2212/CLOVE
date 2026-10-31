@@ -4,10 +4,13 @@
 // Sending a file by email is not in the Windows v1, so `choose` offers the one
 // action the spec asks for: ask a question about it.
 
-import { h, clear } from "./dom";
+import { h, clear, svg } from "./dom";
+import { ICONS } from "./icons";
 import { State } from "../core/state";
 import type { ViewActions, ViewHost } from "./views";
 import { N_, t, tl } from "../i18n/i18n";
+import { LocalSend } from "../core/localsend";
+import { deviceStrip, progressLine } from "./localsend";
 
 /** Dashed rounded rect drawn as SVG so the dashes can march like on macOS. */
 function dashedFrame(): SVGSVGElement {
@@ -36,18 +39,31 @@ export function buildUpload(): ViewHost {
     { class: "drop-tags" },
     ...[N_("PDF"), N_("Images"), N_("Code"), N_("Docs")].map((chip) => h("span", { text: tl(chip) })),
   );
+  // CLOVE fork: who it can go to over LocalSend, and how Clove Notch shows up there.
+  const nearby = h("div", { class: "drop-nearby" });
   const card = h(
     "div",
     { class: "card drop-card" },
     frame,
-    h("div", { class: "drop-body" }, title, tags),
+    h("div", { class: "drop-body" }, title, tags, nearby),
   );
   const el = h("div", { class: "view" }, card);
+  let nearbyKey = "";
 
   return {
     el,
     sync() {
       card.classList.toggle("over", State.fileDragOver);
+      const k = LocalSend.devices.map((d) => d.alias).join("|") + (LocalSend.me?.alias ?? "");
+      if (k === nearbyKey) return;
+      nearbyKey = k;
+      clear(nearby);
+      const names = LocalSend.devices.slice(0, 3).map((d) => d.alias);
+      nearby.append(svg(ICONS.globe, 10, { stroke: 1.8 }), h("span", {
+        text: names.length
+          ? t("Send to {0} over LocalSend, or ask CLOVE about it", { 0: names.join(", ") })
+          : t("Visible on LocalSend as {0}", { 0: LocalSend.me?.alias ?? "CLOVE" }),
+      }));
     },
   };
 }
@@ -101,24 +117,40 @@ export function buildChoose(actions: ViewActions): ViewHost {
       onclick: () => actions.cancelDrop(),
     }),
   );
+  // CLOVE fork: LocalSend — "Send to …" for each device nearby, and the transfer's progress in its place.
+  const send = h("div", { class: "ls-send" });
   const el = h(
     "div",
     { class: "view" },
     h(
       "div",
       { class: "card" },
-      h("div", { class: "stack", style: "padding:0 18px 0 98px" }, title, sub, row),
+      h("div", { class: "stack", style: "padding:0 18px 0 98px" }, title, sub, row, send),
     ),
   );
+  let sendKey = "";
 
   return {
     el,
     sync() {
       clear(title);
-      title.append(
-        h("b", { text: State.droppedFile?.name ?? t("file") }),
-        document.createTextNode(t(" is ready.")),
-      );
+      const n = LocalSend.dropped.length;
+      if (n > 1) {
+        title.append(h("b", { text: t("{0} files", { 0: n }) }), document.createTextNode(t(" are ready.")));
+      } else {
+        title.append(
+          h("b", { text: State.droppedFile?.name ?? t("file") }),
+          document.createTextNode(t(" is ready.")),
+        );
+      }
+      const p = LocalSend.progress?.direction === "out" ? LocalSend.progress : null;
+      const k = JSON.stringify([p?.state, p ? Math.round((p.doneBytes / Math.max(1, p.totalBytes)) * 100) : -1,
+        LocalSend.devices.map((d) => d.id), document.documentElement.lang]);
+      if (k === sendKey) return;
+      sendKey = k;
+      clear(send);
+      if (p) send.append(progressLine(p));
+      else send.append(deviceStrip((d) => void LocalSend.send(d.id, LocalSend.dropped)));
     },
   };
 }

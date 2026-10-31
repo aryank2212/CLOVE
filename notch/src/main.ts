@@ -1,6 +1,7 @@
 // Entry point: boot the bridge, wire Clove Notch, start the greeting.
 
 import { Tools } from "./core/tools";
+import { LocalSend, type LsDevice, type LsProgress, type LsRequest } from "./core/localsend";
 import "./style.css";
 import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
 import { Sound } from "./core/sound";
@@ -182,6 +183,23 @@ async function main() {
   // what they show is redrawn; the toggles and the music are asked of Rust while the Controls page is open,
   // and now and then otherwise (the compact notch shows what's playing, or a recording).
   Tools.onRing = () => island.alert("controls");
+  // LocalSend (core/localsend.ts): devices nearby, a transfer offered to him, progress either way.
+  LocalSend.onRequest = () => island.alert("receive");
+  await onEvent<LsDevice[]>("localsend-devices", (list) => LocalSend.setDevices(list));
+  await onEvent<LsRequest>("localsend-request", (r) => LocalSend.offered(r));
+  await onEvent<LsProgress>("localsend-progress", (p) => {
+    LocalSend.progressed(p);
+    // Something arrived (or he declined) while he was elsewhere in Clove Notch: show it.
+    if (p.direction === "in" && p.state === "done" && State.view !== "receive") island.alert("receive");
+  });
+  let lsView = "";
+  State.subscribe(() => {
+    // Looking at the drop zone or a dropped file: ask who's around.
+    const v = State.mode === "expanded" ? State.view : "";
+    if (v !== lsView && (v === "upload" || v === "choose")) void LocalSend.refresh();
+    lsView = v;
+  });
+  window.setTimeout(() => void LocalSend.refresh(), 4000);
   // A click on Clove Notch while music plays opens the player.
   State.openOn = () => (Tools.media?.playing ? "controls" : null);
   window.addEventListener("clove-fold", () => island.collapse());

@@ -19,6 +19,7 @@ mod identity;
 mod integrations;
 mod island;
 mod local_chat;
+mod localsend;
 mod log;
 mod net;
 mod notes;
@@ -882,6 +883,11 @@ pub fn run() {
             controls::media_control,
             controls::open_in_chrome,
             streaks::streaks_fetch,
+            localsend::localsend_devices,
+            localsend::localsend_answer,
+            localsend::localsend_send,
+            localsend::localsend_me,
+            localsend::localsend_open,
             set_paused,
             shortcuts_status,
             shortcuts_suspend,
@@ -1035,6 +1041,7 @@ pub fn run() {
             pipe::start(handle.clone());
             phone_link::start_if_enabled(&handle);
             integrations::start(handle.clone());
+            localsend::start(&handle);
             spotify::sync(&handle, &loaded.active_integrations);
             // WhatsApp (experimental): nothing runs unless it is turned on and its pill is active.
             whatsapp::start(&handle, &loaded.active_integrations);

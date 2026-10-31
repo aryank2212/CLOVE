@@ -13,6 +13,7 @@ import { FlowBridge } from "../core/flow";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { Tools, clockText, type LiveActivity } from "../core/tools";
+import { LocalSend } from "../core/localsend";
 import { t } from "../i18n/i18n";
 import { APP_LOGOS } from "../views/logos";
 import { ICONS } from "../views/icons";
@@ -611,6 +612,7 @@ export class Island {
       case "drop": {
         State.fileDragOver = false;
         const path = e.paths?.[0];
+        LocalSend.dropped = e.paths ?? [];              // all of them, for "Send to …" (LocalSend)
         if (!path) {
           this.engine.animateMorph(0);
           this.setView(State.defaultView());
@@ -668,6 +670,8 @@ export class Island {
 
   /** "Cancel" on the dropped file: forget it, so the chat does not pick it up. */
   private discardDrop() {
+    LocalSend.dropped = [];
+    if (LocalSend.progress?.direction === "out") LocalSend.progress = null;
     State.droppedFile = null;
     State.promptContext = null;
     this.setView(State.defaultView());

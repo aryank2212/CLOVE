@@ -29,7 +29,9 @@ export type IslandViewName =
   | "whatsNew"
   // CLOVE fork: the Controls and Time pages (views/tools.ts).
   | "controls"
-  | "time";
+  | "time"
+  // CLOVE fork: LocalSend: someone wants to send him files (views/localsend.ts).
+  | "receive";
 
 export type BotStateName =
   | "idle"
@@ -119,6 +121,7 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   // CLOVE fork: two cards a little taller than the overview's; no CLOVE drawn over them.
   controls: { height: 196, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
   time: { height: 196, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
+  receive: { height: 176, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
 };
 
 // The upload views above are only the fallback geometry. Once a file is actually

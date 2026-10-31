@@ -5,6 +5,7 @@
 import { APP_LOGOS, logoFor } from "./logos";
 import { buildControls, buildTime } from "./tools";
 import { buildStandby } from "./standby";
+import { buildReceive } from "./localsend";
 import { h, svg, clear, dot } from "./dom";
 import { ICONS } from "./icons";
 import { KNOWN_AGENTS } from "../island/agents";
@@ -1062,6 +1063,7 @@ export function buildViews(
   map.set("update", buildUpdate());
   map.set("whatsNew", buildWhatsNew());
   map.set("controls", buildControls());
+  map.set("receive", buildReceive(actions));
   map.set("time", buildStandby(buildTime(), actions));
   // Not in the Windows v1: sending a file by email, window attach + web result.
   map.set("mail", buildPlaceholder(tl("Sending by email isn't in this version."), ""));
