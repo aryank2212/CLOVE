@@ -772,3 +772,6 @@ S.muted = store.get('muted', false);
 show(params.get('view') || store.get('view', 'chat'), true);
 renderState(); renderMic(); renderTask(); renderJobs(); renderWorkspace(); renderSettings(); emptyState(); autoCompact();
 connect();
+
+// Inside Clove Notch: say the page loaded, so the notch stops retrying (it reloads an error page every 5 s).
+if (EMBED) parent.postMessage({ type: 'clove:ready' }, '*');
