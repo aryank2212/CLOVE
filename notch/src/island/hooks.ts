@@ -48,6 +48,12 @@ function cancelStopTimer(id: string): boolean {
 const TURN_OVER = new Set(["Stop", "StopFailure", "UserPromptSubmit", "SessionEnd", "Interrupt"]);
 
 interface HookPayload {
+  /** CLOVE fork (CloveMute): CLOVE isn't listening. */
+  muted?: boolean;
+  /** CLOVE fork (CloveNotification): what kind, from whom, what. */
+  kind?: string;
+  sender?: string;
+  text?: string;
   hook_event_name?: string;
   request_id?: string;
   session_id?: string;
@@ -246,6 +252,13 @@ export function registerHookHandlers(island: Island) {
 function handleHook(island: Island, payload: HookPayload) {
   // Account-wide numbers from the status line relay, not part of any session:
   // keep the latest, nothing else (no reveal, no sound), paused or not.
+  // CLOVE fork: CLOVE's microphone went on or off (from its window, this notch, or a phone call): the header follows.
+  if (payload.hook_event_name === "CloveMute") {
+    State.cloveMuted = payload.muted === true;
+    State.notify();
+    return;
+  }
+
   if (payload.hook_event_name === "StatusLine") {
     const usage = parseClaudePlan(payload.rate_limits);
     if (usage) setClaudePlanUsage(usage);
@@ -327,6 +340,41 @@ function handleHook(island: Island, payload: HookPayload) {
   const focused = State.focusId === agentId;
 
   switch (name) {
+    case "CloveNotification": {
+      // CLOVE fork: a message or a call CLOVE saw (its notifications.py / call_watch.py), shown like a phone's
+      // notification: the app's own pill, and the banner open for a few seconds.
+      const kind = (["message", "ringing", "call", "ended", "replied"] as const).find((k) => k === payload.kind) ?? "message";
+      const sender = toOneLine(String(payload.sender ?? "")).slice(0, 80);
+      const text = toOneLine(String(payload.text ?? "")).slice(0, 300);
+      ensurePill();
+      supersedeStop();
+      State.updateTask(agentId, kind === "call" || kind === "ringing" ? "working" : "finished");
+      const line = [sender, text].filter(Boolean).join(": ");
+      if (line) State.appendStep(agentId, line);
+      const pill = State.tasks.find((x) => x.id === agentId);
+      if (pill) pill.finalLine = line;
+      const app = agentName(validAgent ?? "");
+      State.notice = { pillId: agentId, app, kind, sender, text };
+      State.cloveLog = [...State.cloveLog, { app, kind, sender, text, at: Date.now() }].slice(-50);
+      if (kind === "message") State.cloveUnread = { ...State.cloveUnread, [app]: (State.cloveUnread[app] ?? 0) + 1 };
+      Sound.play(kind === "ringing" ? "question" : kind === "ended" ? "finish" : "pop");
+      if (!State.pendingApproval) {                  // a card waiting for his answer is never covered
+        State.setFocus(agentId);
+        surface("message", true);
+      } else {
+        State.setPillBadge(agentId, "finished");
+      }
+      cancelStopTimer(agentId);
+      if (kind !== "call" && kind !== "ringing") {   // the pill stays while a call lasts, then a minute more
+        stopTimers.set(agentId, window.setTimeout(() => {
+          stopTimers.delete(agentId);
+          if (State.notice?.pillId === agentId) State.notice = null;
+          State.removeTask(agentId);
+        }, 60_000));
+      }
+      break;
+    }
+
     case "SessionStart":
       ensurePill();
       clearFinalLine(agentId);

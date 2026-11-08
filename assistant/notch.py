@@ -99,6 +99,12 @@ class Notch:
             self._enqueue(self._payload(event, **fields))
 
     # ---- what Clove reports ------------------------------------------------------------------------
+    def notice(self, app: str, kind: str, sender: str, text: str = ""):
+        """A message or call for Clove Notch to show like a phone's notification, on the app's own pill.
+        kind: message | ringing | call | ended | replied."""
+        slug = "app-" + "".join(ch for ch in app.lower() if ch.isalnum())[:18]
+        self.event("CloveNotification", clove_agent=slug, kind=kind, sender=sender[:80], text=text[:300])
+
     def prompt(self, text: str):
         self.event("UserPromptSubmit", prompt=text[:300])
 

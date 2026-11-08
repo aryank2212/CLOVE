@@ -342,6 +342,23 @@ its chat asks CLOVE itself (over `~/.local/state/clove/ctl.sock`), and CLOVE sho
 is also CLOVE's: its **Assistant** pages show this folder's `ui/` (it reads the address from
 `$XDG_RUNTIME_DIR/clove.url`), and offer to start the `clove` service when CLOVE isn't running.
 
+
+## Instagram DMs (official API)
+
+Instagram's desktop notifications don't say who wrote. With Instagram's own API CLOVE gets every DM with the
+sender's name and @username, and can reply, with no browser and no password (`assistant/instagram.py`).
+
+1. In the Instagram app: Settings › Account type and tools › Switch to professional account › Creator (free).
+2. At developers.facebook.com: Create app › "Other" › Business › add the **Instagram** product ›
+   "API setup with Instagram login". Add your Instagram account (you're its admin, so no app review is needed)
+   and **Generate token**: that is `IG_ACCESS_TOKEN`. The app secret on the same page is `IG_APP_SECRET`.
+3. A public address for this PC's port 8790 (e.g. a Cloudflare tunnel hostname pointing at it).
+4. In the same page's **Configure webhooks**: Callback URL `https://<your hostname>/instagram`, Verify token =
+   your `IG_VERIFY_TOKEN`, then subscribe to **messages**.
+5. Put the three values in `assistant/.env` and restart CLOVE.
+
+Replies work within 24 hours of their last message. The token lasts 60 days; CLOVE renews it every few weeks.
+
 ## Code map
 
 | File | Role |

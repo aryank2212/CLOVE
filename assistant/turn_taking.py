@@ -35,11 +35,16 @@ shall do does did have has had i we you he she they it it's i'm we're you're the
 literally really very more most not no-one also plus whether either neither until unless means mean think thought guess wanted
 want need going gonna wanna kinda sorta well thinking wondering saying hoping planning trying meaning feeling""".split()) | set("""aur lekin par toh to ki ke ka ko mein se jo agar matlab kyunki
 kyonki ya phir fir wala wali bhi hi ek और लेकिन पर तो कि के का को में से जो अगर मतलब क्योंकि या फिर वाला वाली भी ही एक""".split())
+# Of those, the words that can end a sentence too ("what came in", "turn it on", "open this", "I love you"): with a full
+# stop after them, or alone at the end, the sentence is probably finished, so these get a shorter wait than "and" or "the".
+MAYBE_FINAL = set("""in on it that this you too like well me us them him her there here now one do can will is are be not""".split())
 # endings of two or three words that leave the thought open ("...so I was thinking.", "...the thing is.")
 INCOMPLETE_TAIL = {"you know", "i mean", "the thing", "thing is", "i think", "i guess", "i feel", "i believe", "i was",
                    "what i", "the problem", "problem is", "the point", "point is", "let me", "let's see", "i wanted", "i want",
                    "me see", "as in", "i'd say", "tell him", "tell her", "tell them", "ask him", "ask her", "ask them", "text him", "text her", "message him",
-                   "message her", "and tell", "and ask", "saying that", "that he", "that she", "that they", "remind him", "remind her", "i would", "we could", "you could", "we should", "you should", "it's like", "was like"}
+                   "message her", "and tell", "and ask", "saying that", "that he", "that she", "that they", "remind him", "remind her", "i would", "we could", "you could", "we should", "you should", "it's like", "was like",
+                   "think that", "guess that", "believe that", "feel that", "hope that", "wish that", "say that", "said that",
+                   "mean that", "know that", "told him that", "told her that", "so that"}
 
 # Short replies that are complete on their own
 COMPLETE_SHORT = set("""yes yeah yep yup no nope nah ok okay sure fine right correct exactly done thanks thank bye goodbye hello hi
@@ -63,14 +68,23 @@ def classify(text: str) -> str:
         return "complete"
     if t.rstrip().endswith(("...", "…", ",", "-")):
         return "incomplete"
+    ended = t.rstrip(" \"'”’)").endswith((".", "!", "।")) and len(words) >= 2
+    open_tail = len(words) >= 2 and (" ".join(words[-2:]) in INCOMPLETE_TAIL)
     if last in INCOMPLETE and not (len(words) <= 2 and last in ("too", "so", "well")):   # "me too", "so so", "oh well"
+        if last in MAYBE_FINAL and len(words) >= 3 and not open_tail:
+            first = words[1] if words[0] in ("clove", "please", "hey", "ok", "okay") else words[0]
+            if ended or (first in COMMAND_START and len(words) <= 8):
+                return "complete"
+            return "unsure"
         return "incomplete"
-    if len(words) >= 2 and (" ".join(words[-2:]) in INCOMPLETE_TAIL):
+    if open_tail:
         return "incomplete"
     if len(words) <= 4 and all(w in COMPLETE_SHORT or w in FILLER for w in words) and any(w in COMPLETE_SHORT for w in words):
         return "complete"
     lead = words[1] if words[0] in ("clove", "please", "hey", "ok", "okay") and len(words) > 1 else words[0]
     if lead in COMMAND_START and len(words) <= 8:
+        return "complete"
+    if ended:                       # the recogniser put a full stop: the sentence sounded finished (and no tail above says it isn't)
         return "complete"
     return "neutral"
 
@@ -111,7 +125,9 @@ remind mute unmute switch read tell what's whats what where who when how start e
 mark save remember forget cancel next previous volume""".split())
 
 
-WAIT = {"complete": 0.55, "neutral": 1.0, "incomplete": 3.0, None: 1.3}    # seconds of silence before the turn is over
+WAIT = {"complete": 0.35, "neutral": 0.9, "unsure": 1.4, "incomplete": 3.0, None: 1.2}    # seconds of silence before the turn is over
+CHECK_AFTER_S = 0.15       # how much silence before the ending is read (it takes ~0.3-0.6 s to read, so earlier is faster)
+CHECK_PENDING_S = 1.5      # while that read is still running: give it this long, then go by timing alone
 
 
 class Recogniser:
@@ -140,13 +156,17 @@ class Recogniser:
         except Exception as e:
             log.warning("turn-taking recogniser unavailable (%s); using timing only", e)
 
-    def text(self, pcm: bytes) -> str | None:
+    def text(self, pcm: bytes, language: str | None = None) -> str | None:
+        """language: "hi", "en"... when the call's language is known (faster, and Hindi is never read as Russian);
+        None guesses."""
         if self.model is None:
             return None
         pcm = pcm[-RATE * 2 * 3:]                                       # the ending is all that matters; shorter is faster
         x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768
         segs, _ = self.model.transcribe(x, beam_size=1, vad_filter=False, without_timestamps=True,
-                                        condition_on_previous_text=False)
+                                        condition_on_previous_text=False, language=language,
+                                        max_new_tokens=30)    # the last words are all that matter; uncapped, Hindi
+                                                              # on a quiet line can run on for 10+ s
         return " ".join(s.text for s in segs).strip()
 
 
@@ -157,7 +177,8 @@ class TurnTaker:
     "audio" (forward this frame), "end" (their turn is over), "duck" (they may be interrupting: pause Clove' voice),
     "unduck" (it was only a short sound: carry on), "barge" (they really interrupted: drop what Clove was saying)."""
 
-    def __init__(self, recogniser: Recogniser | None = None):
+    def __init__(self, recogniser: Recogniser | None = None, language: str | None = None):
+        self.language = language                       # the call's language for the recogniser (None: it guesses)
         self.rec = recogniser
         self.floor = 60.0                        # noise floor of the line (RMS)
         self.in_turn = False
@@ -179,20 +200,21 @@ class TurnTaker:
     def threshold(self) -> float:
         return max(220.0, self.floor * 3.2)
 
-    def _decide(self, pcm: bytes, started: float):
+    def _decide(self, pcm: bytes, started: float, voice_mark: float):
         try:
-            text = self.rec.text(pcm) if self.rec else None
+            text = self.rec.text(pcm, self.language) if self.rec else None
         except Exception as e:
             log.debug("recogniser failed: %s", e)
             text = None
         with self._lock:
-            if self.in_turn and self.turn_started == started and text is not None:
+            # Only if nothing was said since the audio it read: a pause that was not the end gives no verdict.
+            if self.in_turn and self.turn_started == started and self.last_voice == voice_mark and text is not None:
                 self.verdict, self.verdict_text = classify(text), text
             self._deciding = False
 
     def _check_duck(self, pcm: bytes):
         try:
-            text = self.rec.text(pcm) if self.rec else ""
+            text = self.rec.text(pcm, self.language) if self.rec else ""
         except Exception:
             text = ""
         self.duck_check = "speech" if is_interruption(text or "") else "backchannel"
@@ -260,13 +282,13 @@ class TurnTaker:
             self.last_voice = now
             return ev
         silence = now - self.last_voice
-        if silence >= 0.3 and self.verdict is None and not self._deciding and self.rec is not None:
+        if silence >= CHECK_AFTER_S and self.verdict is None and not self._deciding and self.rec is not None:
             self._deciding = True
             tail = bytes(self.utterance[-RATE * 2 * 4:])     # the last ~4 s is enough to judge how it ends (and is fast)
-            threading.Thread(target=self._decide, args=(tail, self.turn_started), daemon=True).start()
+            threading.Thread(target=self._decide, args=(tail, self.turn_started, self.last_voice), daemon=True).start()
         limit = WAIT[self.verdict]
         if self.verdict is None and self._deciding:
-            limit = 2.0                                      # a check is still running: don't guess, give it a moment
+            limit = CHECK_PENDING_S                          # a check is still running: don't guess, give it a moment
         if silence >= limit or silence >= 3.2:
             self.in_turn = False
             self.voice_streak = 0

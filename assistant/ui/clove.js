@@ -558,6 +558,12 @@ function renderSettings() {
     <div class="row"><div class="lab">Wake word<small>Nothing goes to a brain until you say "${esc((i.wake_names || []).join('" or "'))}". Off: CLOVE always listens.</small></div>${sw('wake', p.wake, 'Wake word')}</div>
     <div class="row"><div class="lab">Microphone<small>${S.route ? esc(S.route.label) : 'Device unknown'}</small></div>${sw('mic', !S.muted, 'Microphone')}</div>
     <div class="row"><div class="lab">Chimes<small>Short sounds when CLOVE hears you and when jobs finish.</small></div>${sw('earcons', p.earcons, 'Chimes')}</div>
+    <div class="row"><div class="lab">Read out new messages<small>When WhatsApp, Instagram, X, LinkedIn and the like notify you, CLOVE says who wrote and offers to reply. Not during dictation, focus or a call.</small></div>${sw('announce', p.announce !== false, 'Read out new messages')}</div>
+    <div class="row"><div class="lab">Send messages to Telegram when I'm away<small>While the screen is locked, or nothing has moved for a while, new messages also go to your Telegram bot. Needs a Telegram bot of its own (CLOVE_TELEGRAM_BOT_TOKEN) and TELEGRAM_CHAT_ID.</small></div>${sw('forward', p.forward !== false, 'Send messages to Telegram when away')}</div>
+    <div class="row"><div class="lab">Reply to messages for me<small>WhatsApp only, never in groups: CLOVE answers new messages briefly as your assistant, says you'll get back to them, and tells you what it sent. It never shares your details or agrees to anything, skips codes, money and companies, and replies to each person at most once every 30 minutes.</small></div>${sw('autoreply', !!p.autoreply, 'Reply to messages for me')}</div>
+    <div class="row"><div class="lab">Answer my calls<small>When a call rings on WhatsApp Web, or on your phone while it is connected to this PC over Bluetooth, CLOVE picks up as your assistant, takes a message and keeps talking if they want to. Never money, codes or promises. You hear both sides live, and get a summary on Telegram afterwards (CLOVE's own bot).</small></div>${sw('answercalls', !!p.answercalls, 'Answer my calls')}</div>
+    <div class="row"><div class="lab">Talk to callers in Hindi<small>On calls CLOVE speaks natural, everyday Hindi (Hinglish is fine), and switches to English only if the caller does.</small></div>${sw('callhindi', !!p.callhindi, 'Talk to callers in Hindi')}</div>
+    <div class="row"><div class="lab">Mind the music<small>While music or a video plays, CLOVE wakes only to "Clove, …" said clearly, and falls asleep sooner, so songs aren't taken for you.</small></div>${sw('musicaware', p.musicaware !== false, 'Mind the music')}</div>
   </div>
   <div class="label">Window</div><div class="card">
     ${EMBED ? '' : `<div class="row"><div class="lab">Compact companion<small>A small floating window in the bottom-right corner (Ctrl+J). Remembered at the next start.</small></div>${sw('compact', document.body.classList.contains('compact'), 'Compact companion')}</div>
@@ -745,6 +751,7 @@ function connect() {
       case 'route': S.route = m; renderMic(); break;
       case 'notice': notice = m.text || ''; renderState(); addEvent(m); break;
       case 'toast': if (m.ts > S.since) toast(m.text, m.level); addEvent(m); break;
+      case 'muted': S.muted = !!m.value; store.set('muted', S.muted); renderMic(); break;   // muted from Clove Notch or a call
       case 'telemetry': S.tel = m; renderTelemetry(); break;
       case 'services': S.services = m.items; S.svcChecked = m.checked; renderServices(); break;
       case 'workspace': S.ws = m; renderWorkspace(); break;

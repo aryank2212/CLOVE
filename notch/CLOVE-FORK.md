@@ -39,6 +39,14 @@ link at each old path, so hooks written before the rename keep working. Names in
   `http://127.0.0.1:*` only. When CLOVE isn't running the page says so and can start its systemd user service.
   `clove-notch --page assistant` opens the window there (CLOVE does this when it is asked for its window).
 
+**Messages and calls, like a phone's notifications.** CLOVE sends a `CloveNotification` hook event (`kind`: message,
+ringing, call, ended, replied; `sender`; `text`) for every message it sees (WhatsApp, Instagram, Telegram, X,
+LinkedIn and the rest) and every call it rings, takes or ends. Each app gets its own pill in its own colour
+(`agents.ts`, `app-*`), and the "message" view opens like a banner: the app, who, what, with Reply / OK, or
+I'll take it / End call while CLOVE is on a call. The buttons tell CLOVE what to do as if he had said it
+(`clove_tell`, over CLOVE's control socket). A pill goes a minute after its last message; a call's stays while the
+call lasts.
+
 ## Build and install
 
 ```bash

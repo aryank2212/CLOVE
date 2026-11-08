@@ -26,6 +26,15 @@ ACTIONS = ("context", "tabs", "read", "text", "selected", "links", "find", "open
            "wa_chat", "wa_send", "wa_join_call", "chat_links", "call_state", "call_isolate", "call_release", "wait")
 
 
+def version_key(v: str) -> tuple:
+    """'3.10.2' -> (3, 10, 2), so versions compare as numbers."""
+    out = []
+    for part in str(v).split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        out.append(int(digits) if digits else 0)
+    return tuple(out)
+
+
 class Bridge:
     def __init__(self):
         self.ws = None
@@ -38,12 +47,15 @@ class Bridge:
         self.on_stale = None            # called when the connected extension is older than the one on disk
         self._tried_at = -1e9           # last time ensure_connected() waited for the extension in vain
         self.on_change = None           # called with the new screen note whenever what he looks at changes
+        self._asked: set[str] = set()   # versions already asked to reload themselves
 
     @property
     def stale(self) -> bool:
-        """The extension loaded in Chrome is older than the files on disk (Chrome only picks up changes on 'Reload')."""
+        """The extension loaded in Chrome is older than the files on disk (Chrome only picks up changes on 'Reload').
+        Only older: a newer one (loaded from another folder) is left alone, or reloading it changes nothing and it
+        reconnects and is asked again, over and over."""
         want = wanted_version()
-        return bool(self.ws and want and self.ext_version != want)
+        return bool(self.ws and want and self.ext_version and version_key(self.ext_version) < version_key(want))
 
     @property
     def connected(self) -> bool:
@@ -80,7 +92,8 @@ class Bridge:
                         SEEN.write_text(self.ext_version)          # installed once: never ask to install again
                     except OSError:
                         pass
-                    if self.stale:
+                    if self.stale and self.ext_version not in self._asked:
+                        self._asked.add(self.ext_version)          # once per version: a reload that didn't help isn't repeated
                         asyncio.create_task(self._update(ws))
                 elif "state" in msg:
                     self.active = msg["state"]

@@ -493,7 +493,8 @@ async function main() {
   const status = await FlowBridge.status();
   if (status) platform = status.platform;
   state = (await FlowBridge.pillState()) ?? state;
-  visible = state.enabled || state.noteStartedAt !== null || state.announcement !== null || state.voice !== null;
+  // CLOVE fork: no resting bar at the bottom; its buttons are in the notch header. It shows only while in use.
+  visible = state.phase !== "idle" || state.noteStartedAt !== null || state.announcement !== null || state.voice !== null;
   render();
   void onEvent<PillState>("pill-state", (s) => {
     state = s;

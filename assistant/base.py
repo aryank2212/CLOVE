@@ -54,6 +54,15 @@ def parse_switch(text: str) -> str | None:
     return None
 
 
+def held_summary(notes: list[str]) -> str:
+    """What came in while he had CLOVE muted, as one note: told once, briefly, not one announcement each."""
+    body = "\n".join(f"- {n[:500]}" for n in notes[-15:])
+    more = f"\n(and {len(notes) - 15} earlier ones)" if len(notes) > 15 else ""
+    return (f"[System note, not a request] He had you muted; he just unmuted you. While muted, these came in:\n"
+            f"{body}{more}\nGive him ONE short summary of them (who, roughly what), then ask if he wants to act on "
+            f"any. Don't read them all out one by one.")
+
+
 class Assistant:
     def __init__(self, ui, speaker=None):
         self.ui, self.speaker = ui, speaker
@@ -94,12 +103,27 @@ class Assistant:
         self.pair = Pair(self)
         from dashboard import Dashboard
         self.dashboard = Dashboard(self)
+        from notifications import Notifications
+        self.messages = Notifications(self)      # message notifications: announced, and kept for "what came in?"
+        from autoreply import AutoReply
+        self.autoreply = AutoReply(self)         # answers WhatsApp messages for him when he turns it on
+        from instagram import Instagram
+        self.instagram = Instagram(self)         # Instagram DMs through the official API, when it is set up
+        from call_watch import CallWatch
+        self.call_watch = CallWatch(self)        # picks up his WhatsApp calls when he turns it on
+        from media_aware import MediaWatch
+        self.media = MediaWatch(self)            # music on the speakers: not taken for him, and turned down while he talks
+        from away import Away
+        self.away = Away(self)                   # at the PC or not: messages go to Telegram while he's away
         from notch import Notch
         self.notch = Notch(self)             # Clove Notch app at the top of the screen, when it runs
         self._notch_utt = -1
         self.connected = False
         # audio / visual state
-        self.muted = False
+        self.muted = False            # muted: CLOVE neither listens nor speaks (Clove Notch's mic button, the window)
+        self.held_notes: list[str] = []   # what came in while muted, told on unmute
+        self.mode = "off"             # Clove Notch's Work / DND / Sleep (set_mode)
+        self._mode_muted = False      # Sleep muted CLOVE (so leaving Sleep unmutes it)
         self.half_duplex = False
         self.echo_tail = 0.4          # seconds the mic stays muted after Clove stops talking
         self.mic_level = 0.0
@@ -140,7 +164,11 @@ class Assistant:
             await self.brain.send_text(text)
 
     async def notify(self, note: str):
-        """A system note for the model (reminder due, job finished) - not a user request."""
+        """A system note for the model (reminder due, job finished) - not a user request. While he has CLOVE muted
+        it is kept, and told when he unmutes. The same in Do Not Disturb and Sleep."""
+        if self.muted or getattr(self, "mode", "off") in ("dnd", "sleep"):
+            self.held_notes.append(note)
+            return
         if self.brain and self.connected:
             await self.brain.notify(note)
         else:
@@ -153,6 +181,9 @@ class Assistant:
                                       "details that aren't in this result.)"))
 
     async def deliver_job(self, job: Job):
+        if self.muted or getattr(self, "mode", "off") in ("dnd", "sleep"):
+            self.held_notes.append(self.job_note(job))
+            return
         if self.brain and self.connected:
             await self.brain.deliver_job(job)
         else:
@@ -297,10 +328,54 @@ class Assistant:
             log.warning("greeting failed: %s", e)
 
     # ---- inputs from the window and the microphone -------------------------
+    def set_muted(self, on: bool) -> bool:
+        """Stop or start listening, from wherever (the window, Clove Notch's mic button, a phone call), and keep the
+        window and the notch showing it."""
+        on = bool(on)
+        changed = on != self.muted
+        self.muted = on
+        if changed:
+            log.info("CLOVE %s", "muted (not listening, not speaking)" if on else "unmuted")
+            self.ui.send(type="muted", value=on)
+            if getattr(self, "notch", None) is not None:
+                self.notch.event("CloveMute", muted=on)
+        if on and getattr(self, "speaker", None):
+            self.speaker.clear()                  # stop mid-sentence
+        if changed and not on and self.held_notes:
+            notes, self.held_notes = self.held_notes, []
+            try:
+                asyncio.get_running_loop().create_task(self.notify(held_summary(notes)))
+            except RuntimeError:
+                self.pending_notes.append(held_summary(notes))
+        return on
+
+    def set_mode(self, mode: str) -> str:
+        """Clove Notch's focus slider. work: a focus session (non-urgent things wait); dnd: nothing read out, kept
+        for one summary after; sleep: dnd and not listening either. off: back to normal."""
+        mode = mode if mode in ("work", "dnd", "sleep") else "off"
+        old, self.mode = self.mode, mode
+        if old == mode:
+            return mode
+        log.info("mode %s -> %s", old, mode)
+        if mode == "work" and not self.focus.active:
+            self.focus.start(240)
+        elif old == "work" and self.focus.active:
+            self.focus.stop()
+        if mode == "sleep":
+            self._mode_muted = not self.muted
+            self.set_muted(True)
+        elif old == "sleep" and self._mode_muted:
+            self._mode_muted = False
+            self.set_muted(False)                      # tells what was held, if anything
+        if mode in ("off", "work") and old == "dnd" and self.held_notes and not self.muted:
+            notes, self.held_notes = self.held_notes, []
+            asyncio.get_running_loop().create_task(self.notify(held_summary(notes)))
+        return mode
+
     def on_ui(self, m: dict):
         t = m.get("type")
         if t == "mute":
-            self.muted = bool(m.get("value"))
+            self.set_muted(m.get("value"))
         elif t == "text":
             text = str(m.get("text", "")).strip()[:2000]
             if text:
@@ -357,8 +432,14 @@ class Assistant:
                 self.preroll.append(data)
                 chunks = [bytes(len(data))]
         if self.wake.enabled:
-            for frame in self.wake.take_replay():           # "Clove, open YouTube": the words that woke him
-                self.feed_audio([frame], True, now)
+            frames = self.wake.take_replay()                # "Clove, open YouTube": the words that woke him
+            if frames:
+                text = self.wake.take_replay_text()
+                feed = getattr(self.brain, "feed_replay", None)
+                # A finished sentence goes as one turn at once; one that trails off goes through the turn-taker.
+                if not (feed and self.connected and feed(b"".join(frames), text)):
+                    for frame in frames:
+                        self.feed_audio([frame], True, now)
             chunks = self.wake.filter(chunks, voice and not echo, now)
             if chunks is None:
                 return
@@ -689,7 +770,7 @@ class Assistant:
         bridge.on_stale = lambda have, want: (log.warning("Chrome extension is out of date (v%s, need v%s)", have, want),
                                               self.ui.send(type="notice", text=f"Reload the Clove Hands extension in Chrome (v{have} loaded, v{want} available): chrome://extensions"))
         await bridge.start()
-        tasks = [asyncio.create_task(c) for c in (self._ticker(), self._watch_audio_route(), self._narrator(), self._memory_keeper(), self._screen_feeder(), self._ctl(), self._phone(),
+        tasks = [asyncio.create_task(c) for c in (self._ticker(), self._watch_audio_route(), self._narrator(), self._memory_keeper(), self._screen_feeder(), self._ctl(), self._phone(), self.messages.run(), self.away.run(), self.call_watch.run(), self.instagram.run(), self.media.run(),
                                                      self.dashboard.run())]
         self.send_engine()
         if not first:
