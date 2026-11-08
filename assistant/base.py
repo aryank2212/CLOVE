@@ -122,6 +122,8 @@ class Assistant:
         # audio / visual state
         self.muted = False            # muted: CLOVE neither listens nor speaks (Clove Notch's mic button, the window)
         self.held_notes: list[str] = []   # what came in while muted, told on unmute
+        self.mode = "off"             # Clove Notch's Work / DND / Sleep (set_mode)
+        self._mode_muted = False      # Sleep muted CLOVE (so leaving Sleep unmutes it)
         self.half_duplex = False
         self.echo_tail = 0.4          # seconds the mic stays muted after Clove stops talking
         self.mic_level = 0.0
@@ -163,8 +165,8 @@ class Assistant:
 
     async def notify(self, note: str):
         """A system note for the model (reminder due, job finished) - not a user request. While he has CLOVE muted
-        it is kept, and told when he unmutes."""
-        if self.muted:
+        it is kept, and told when he unmutes. The same in Do Not Disturb and Sleep."""
+        if self.muted or getattr(self, "mode", "off") in ("dnd", "sleep"):
             self.held_notes.append(note)
             return
         if self.brain and self.connected:
@@ -179,7 +181,7 @@ class Assistant:
                                       "details that aren't in this result.)"))
 
     async def deliver_job(self, job: Job):
-        if self.muted:
+        if self.muted or getattr(self, "mode", "off") in ("dnd", "sleep"):
             self.held_notes.append(self.job_note(job))
             return
         if self.brain and self.connected:
@@ -347,6 +349,29 @@ class Assistant:
                 self.pending_notes.append(held_summary(notes))
         return on
 
+    def set_mode(self, mode: str) -> str:
+        """Clove Notch's focus slider. work: a focus session (non-urgent things wait); dnd: nothing read out, kept
+        for one summary after; sleep: dnd and not listening either. off: back to normal."""
+        mode = mode if mode in ("work", "dnd", "sleep") else "off"
+        old, self.mode = self.mode, mode
+        if old == mode:
+            return mode
+        log.info("mode %s -> %s", old, mode)
+        if mode == "work" and not self.focus.active:
+            self.focus.start(240)
+        elif old == "work" and self.focus.active:
+            self.focus.stop()
+        if mode == "sleep":
+            self._mode_muted = not self.muted
+            self.set_muted(True)
+        elif old == "sleep" and self._mode_muted:
+            self._mode_muted = False
+            self.set_muted(False)                      # tells what was held, if anything
+        if mode in ("off", "work") and old == "dnd" and self.held_notes and not self.muted:
+            notes, self.held_notes = self.held_notes, []
+            asyncio.get_running_loop().create_task(self.notify(held_summary(notes)))
+        return mode
+
     def on_ui(self, m: dict):
         t = m.get("type")
         if t == "mute":
@@ -407,8 +432,14 @@ class Assistant:
                 self.preroll.append(data)
                 chunks = [bytes(len(data))]
         if self.wake.enabled:
-            for frame in self.wake.take_replay():           # "Clove, open YouTube": the words that woke him
-                self.feed_audio([frame], True, now)
+            frames = self.wake.take_replay()                # "Clove, open YouTube": the words that woke him
+            if frames:
+                text = self.wake.take_replay_text()
+                feed = getattr(self.brain, "feed_replay", None)
+                # A finished sentence goes as one turn at once; one that trails off goes through the turn-taker.
+                if not (feed and self.connected and feed(b"".join(frames), text)):
+                    for frame in frames:
+                        self.feed_audio([frame], True, now)
             chunks = self.wake.filter(chunks, voice and not echo, now)
             if chunks is None:
                 return

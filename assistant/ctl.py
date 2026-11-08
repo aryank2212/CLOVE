@@ -58,6 +58,9 @@ async def command(a, line: str) -> str:
         a.user_said(arg, typed=True)
         await a.send_text(arg)
         return "ok"
+    if cmd == "mode":                            # Clove Notch's Work / DND / Sleep slider: mode work|dnd|sleep|off|status
+        arg = arg.strip().lower()
+        return a.mode if arg in ("", "status") else a.set_mode(arg)
     if cmd == "mute":                            # Clove Notch's mic button: mute on|off|toggle|status
         want = {"on": True, "off": False, "toggle": not a.muted}.get(arg.strip().lower(), a.muted)
         return "muted" if a.set_muted(want) else "listening"

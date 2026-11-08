@@ -55,6 +55,7 @@ class WakeGate:
         self.in_utt = False
         self.last_voice = 0.0
         self.replay: bytes | None = None                  # a woken utterance, handed to the brain from the mic thread
+        self.replay_text = ""                             # what it said (already read, to decide how it ended)
         self.busy = False
         self.recogniser = None
         if self.enabled:
@@ -139,6 +140,7 @@ class WakeGate:
             text = " ".join(s.text for s in segs).strip()
             pattern = self.strict if self.music() else self.pattern
             if text and pattern.search(text):
+                self.replay_text = text
                 self._woken(pcm, repr(text))
             elif text:
                 log.debug("asleep, ignored%s: %r", " (music playing)" if self.music() else "", text)
@@ -146,6 +148,10 @@ class WakeGate:
             log.warning("wake check failed: %s", e)
         finally:
             self.busy = False
+
+    def take_replay_text(self) -> str:
+        text, self.replay_text = self.replay_text, ""
+        return text
 
     def _woken(self, pcm: bytes, why: str):
         self.wake(why)

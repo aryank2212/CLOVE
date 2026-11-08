@@ -136,7 +136,7 @@ class GeminiBrain:
             self._acc.extend(c)
             while len(self._acc) >= 1280:                          # 40 ms frames for the turn-taker
                 frame = bytes(self._acc[:1280]); del self._acc[:1280]
-                events = self.turns.on_frame(frame, clove_speaking=self.a.speaking())
+                events = self.turns.on_frame(frame, clove_speaking=self.a.speaking(), now=now)
                 for e in events:
                     if e == "start":
                         self.a.loop.call_soon_threadsafe(self._enqueue, ("start", bytes(self.turns.utterance)))
@@ -149,9 +149,25 @@ class GeminiBrain:
                     elif e == "barge":
                         self.a.loop.call_soon_threadsafe(self.a.stop_speaking)
 
+    def feed_replay(self, pcm: bytes, text: str) -> bool:
+        """The sentence that woke CLOVE ("Clove, open YouTube"): it already ended in silence and was read, so it goes to
+        Gemini as one finished turn at once, instead of waiting through the turn-taker's silence and reading it all over
+        again (about a second more). A sentence that trails off ("Clove, can you check my messages and") is left to
+        the turn-taker, which waits for the rest. False: not handled."""
+        from turn_taking import classify
+        if not config.SMART_TURNS or not text or classify(text) == "incomplete":
+            return False
+        self.a.loop.call_soon_threadsafe(self._enqueue, ("start", pcm))
+        self.a.loop.call_soon_threadsafe(self._enqueue, ("end", b""))
+        log.info("woke on %r: sent as one turn", text[-60:])
+        return True
+
     def _enqueue(self, data):
         if isinstance(data, tuple) or not self.mic_q.full():        # turn markers are never dropped
             self.mic_q.put_nowait(data)
+
+    _sent_at = 0.0
+    _sent_kind = ""
 
     def on_new_request(self):
         self.tools_since_user = False
@@ -162,6 +178,7 @@ class GeminiBrain:
             self.a.ui.send(type="notice", text="Not connected yet; try again in a moment.")
             return
         self.a.awaiting, self.a.await_since = True, time.monotonic()
+        self._sent_at, self._sent_kind = time.monotonic(), "typed"
         try:
             await self.session.send_realtime_input(text=text)
         except Exception as e:
@@ -266,6 +283,7 @@ class GeminiBrain:
                     for i in range(0, len(pre), 1280):
                         await session.send_realtime_input(audio=types.Blob(data=pre[i:i + 1280], mime_type=f"audio/pcm;rate={IN_RATE}"))
                 else:
+                    self._sent_at, self._sent_kind = time.monotonic(), "spoken"
                     await session.send_realtime_input(activity_end=types.ActivityEnd())
                 continue
             await session.send_realtime_input(audio=types.Blob(data=data, mime_type=f"audio/pcm;rate={IN_RATE}"))
@@ -315,6 +333,10 @@ class GeminiBrain:
 
     def _play(self, pcm: bytes):
         a = self.a
+        if self._sent_at:
+            # How long Gemini took: from the end of his turn (or Enter) to the first sound of the answer.
+            log.info("reply latency: %.2fs from the end of your %s turn to the first sound", time.monotonic() - self._sent_at, self._sent_kind)
+            self._sent_at = 0.0
         a.awaiting = False
         if a.mute_output or a.muted:
             return

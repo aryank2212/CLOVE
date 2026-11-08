@@ -45,7 +45,7 @@ class FakeRec:
 tt = turn_taking.TurnTaker(FakeRec(), "hi")
 tt.in_turn, tt.turn_started = True, 1.0
 tt._deciding = True
-tt._decide(b"\0" * 32000, 1.0)
+tt._decide(b"\0" * 32000, 1.0, tt.last_voice)
 check("each pause is read as Hindi, not guessed", heard == ["hi"])
 print("ALL PASSED" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

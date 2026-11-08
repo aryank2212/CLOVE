@@ -224,6 +224,12 @@ class Notifications:
         self._enqueue(note)
 
     def _enqueue(self, note: Note):
+        if getattr(self.a, "mode", "off") in ("dnd", "sleep"):
+            # Do Not Disturb / Sleep: not read out now; one summary when he comes back.
+            held = getattr(self.a, "held_notes", None)
+            if held is not None and len(held) < 60:
+                held.append(f"{note.platform} message from {note.who}: {note.body[:200]}")
+            return
         if not self.announcing():
             return
         now = time.monotonic()
