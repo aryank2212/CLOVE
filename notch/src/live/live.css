@@ -1243,9 +1243,10 @@
   box-shadow: 0 0 0 2px #000;
 }
 
-/* The pill's right end: a red mic while CLOVE is muted. */
-#mini-grid.status { display: grid; place-items: center; width: 29px; height: 29px; color: #ff453a; }
-#mini-grid.status svg { fill: currentColor; }
+/* The pill's right end: a red mic while CLOVE is muted, centred in its slot (the slot's 2×2 grid would put it
+   in the top-left cell: high, and against the activity beside it). */
+#mini-grid.status { display: flex; align-items: center; justify-content: center; width: 29px; height: 29px; color: #ff453a; }
+#mini-grid.status svg { fill: currentColor; flex: none; }
 
 /* ── The bar a resting pointer opens: every page, one click away ───────────────── */
 

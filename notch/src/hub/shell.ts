@@ -5,6 +5,7 @@
 // Port of FlowHub.swift.
 
 import "./hub.css";
+import "./glass.css";
 import { h, clear } from "../views/dom";
 import { t } from "../i18n/i18n";
 import { onEvent } from "../core/bridge";
@@ -58,6 +59,23 @@ export const NOTCH_PAGES: PageDef[] = [
 const ALL = [...CLOVE_PAGES, ...FLOW_PAGES, ...NOTCH_PAGES];
 const cloveView = (page: PageId): CloveView | null => (page.startsWith("clove-") ? (page.slice(6) as CloveView) : null);
 
+/** The colour of each page's tile in the sidebar, as in the Mac's System Settings (glass.css draws it). */
+const TILES: Record<PageId, string> = {
+  "clove-chat": "#FF9F0A", "clove-activity": "#FF375F", "clove-systems": "#32ADE6", "clove-prefs": "#8E8E93",
+  dictation: "#FF453A", notes: "#0A84FF", insights: "#30D158", dictionary: "#A259FF", snippets: "#F5A623",
+  styles: "#FF2D92", flowsettings: "#8E8E93",
+  general: "#8E8E93", pills: "#5E5CE6", agents: "#0A84FF", chat: "#E07950", voice: "#FF9F0A",
+  integrations: "#7C5CFF", phone: "#30D158", shortcuts: "#636366",
+};
+
+/** A range input's white fill, as far as its value (glass.css draws it from --fill). */
+function fillRange(el: HTMLInputElement) {
+  const min = Number(el.min || 0);
+  const max = Number(el.max || 100);
+  const pct = max > min ? ((Number(el.value) - min) / (max - min)) * 100 : 0;
+  el.style.setProperty("--fill", `${Math.max(0, Math.min(100, pct))}%`);
+}
+
 /** What a page gets to draw itself and reach the rest of the window. */
 export interface HubContext {
   status: FlowStatus;
@@ -100,10 +118,26 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
   // canvases animate only while it is on screen (#792).
   const items = new Map<PageId, HTMLElement>();
   const counts = new Map<PageId, HTMLElement>();
+  // Declared before anything that can be called back (a frame's view, the window shown) reads it.
+  let current: PageId = "clove-chat";
+  // The sidebar's selection: one lozenge that glides to the item picked.
+  const glide = h("div", { class: "hub-glide", "aria-hidden": "true" });
+  let glided = false;
+  function mark(animate = true) {
+    for (const [id, el] of items) el.classList.toggle("on", id === current);
+    const on = items.get(current);
+    // Not laid out yet (the window is still hidden): placed once it is.
+    if (!on || on.offsetHeight === 0) return;
+    glide.classList.toggle("instant", !animate || !glided);
+    glide.style.transform = `translateY(${on.offsetTop}px)`;
+    glide.style.height = `${on.offsetHeight}px`;
+    glide.style.opacity = "1";
+    glided = true;
+  }
   const clove = new CloveFrame(
     (view) => {
       current = `clove-${view}` as PageId;
-      for (const [id, el] of items) el.classList.toggle("on", id === current);
+      mark();
     },
     (count) => {
       const badge = counts.get("clove-activity");
@@ -115,15 +149,17 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
   const windowShown = (shown: boolean) => {
     setWindowShown(shown);
     clove.setWindowShown(shown);
+    if (shown) requestAnimationFrame(() => mark(false));
   };
   await onEvent<boolean>("hub-visible", windowShown);
   const shown = await FlowBridge.hubShown();
   if (shown !== null) windowShown(shown);
-  let current: PageId = "clove-chat";
   let status: FlowStatus = (await FlowBridge.status()) ?? DEFAULT_STATUS;
   const statusLine = h("div", { class: "hub-status" });
   const scroll = h("div", { class: "hub-scroll" });
   let rendering = 0;
+  /** The page last drawn in the panel. */
+  let shownPage: PageId | null = null;
 
   const ctx: HubContext = {
     get status() {
@@ -170,10 +206,11 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
     ctx.onLeave?.();
     ctx.onLeave = undefined;
     current = def.id;
-    for (const [id, el] of items) el.classList.toggle("on", id === current);
+    mark();
     const token = ++rendering;
     const view = cloveView(def.id);
     if (view) {
+      shownPage = def.id;
       scroll.hidden = true;
       clove.show(view);
       return;
@@ -191,21 +228,30 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
       await opts.renderNotch(def.id, container);
     }
     if (token !== rendering) return;
+    // A page drawn again after one of its settings changed stays where it was scrolled, and still;
+    // a page arrived on rises into place.
+    const again = def.id === shownPage;
+    const top = again ? scroll.scrollTop : 0;
+    shownPage = def.id;
+    if (!again) {
+      page_.classList.add("entering");
+      window.setTimeout(() => page_.classList.remove("entering"), 700);
+    }
     clear(scroll);
     scroll.append(page_);
-    scroll.scrollTop = 0;
+    scroll.scrollTop = top;
   }
 
   // ── The sidebar ──
   const side = h("nav", { class: "hub-side" });
   const logo = h("canvas", {});
-  side.append(h("div", { class: "hub-brand" }, logo, h("span", { text: "CLOVE" })));
+  side.append(glide, h("div", { class: "hub-brand" }, logo, h("span", { text: "CLOVE" })));
   liveCLOVE(logo as HTMLCanvasElement);
   const group = (title: string, pages: PageDef[]) => {
     side.append(h("div", { class: "hub-group", text: title }));
     for (const p of pages) {
       const b = h("button", { class: "hub-item", onclick: () => void show(p.id) });
-      b.append(icon(p.icon), h("span", { text: p.title() }));
+      b.append(h("span", { class: "hub-ic", style: `--tile:${TILES[p.id]}` }, icon(p.icon)), h("span", { text: p.title() }));
       if (p.id === "clove-activity") {
         const badge = h("span", { class: "hub-count", "aria-label": "needs attention" });
         badge.hidden = true;
@@ -224,6 +270,15 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
   clear(root);
   root.append(side, h("main", { class: "hub-panel" }, clove.el, scroll));
   drawStatus();
+  // Sliders show their fill from the start, and follow the thumb.
+  const fillAll = () => root.querySelectorAll<HTMLInputElement>('input[type="range"]').forEach(fillRange);
+  new MutationObserver(fillAll).observe(root, { childList: true, subtree: true });
+  root.addEventListener("input", (e) => {
+    if (e.target instanceof HTMLInputElement && e.target.type === "range") fillRange(e.target);
+  });
+  // The selection follows its item if the sidebar's layout moves (the wordmark's font arriving, a resize).
+  new ResizeObserver(() => mark(false)).observe(side);
+  void document.fonts?.ready.then(() => mark(false));
   await show(current);
 
   void onEvent<string>("hub-page", (page) => {

@@ -29,7 +29,7 @@ export function updateRows(toggle: Toggle, version: string): HTMLElement[] {
     },
   }) as HTMLButtonElement;
   const feedback = h("span", { class: "hint" });
-  const footer = h("span", { class: "hint", style: "flex:1 1 0;min-width:0" });
+  const footer = h("div", { class: "hint" });
   const current = h("span", { class: "hint" });
 
   function draw() {
@@ -62,14 +62,11 @@ export function updateRows(toggle: Toggle, version: string): HTMLElement[] {
   });
   draw();
 
+  // The toggle and what it does, then the version you have beside "Check now", then how updates arrive.
   return [
-    h("div", { class: "row" },
-      h("label", { text: t("Updates") }),
-      sw,
-      h("span", { class: "hint", text: t("Tell me when a new version is out") }),
-    ),
-    h("div", { class: "row" }, h("label", {}), install, check, feedback),
-    h("div", { class: "row" }, h("label", {}), footer),
-    h("div", { class: "row" }, h("label", {}), current),
+    h("div", { class: "row" }, h("label", { text: t("Updates") }), sw),
+    h("div", { class: "hint", text: t("Tell me when a new version is out") }),
+    h("div", { class: "row" }, h("label", {}), current, feedback, check, install),
+    footer,
   ];
 }

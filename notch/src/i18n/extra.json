@@ -898,18 +898,31 @@
       "de": "Breite (kompakt)",
       "tr": "Kompakt genişlik"
     },
-    "How wide Clove Notch is when it's folded small: more room for the song, the timer and the clock.": {
-      "zh-Hans": "Clove Notch 收起时的宽度：给歌曲、计时器和时钟更多空间。",
-      "hi": "छोटा होने पर Clove Notch कितना चौड़ा हो: गाने, टाइमर और घड़ी के लिए ज़्यादा जगह।",
-      "es": "Qué tan ancho es Clove Notch cuando está plegado: más espacio para la canción, el temporizador y el reloj.",
-      "ar": "عرض Clove Notch عند طيّه: مساحة أكبر للأغنية والمؤقت والساعة.",
-      "fr": "La largeur de Clove Notch replié : plus de place pour le morceau, le minuteur et l'horloge.",
-      "bn": "ছোট অবস্থায় Clove Notch কতটা চওড়া: গান, টাইমার ও ঘড়ির জন্য বেশি জায়গা।",
-      "pt-BR": "A largura do Clove Notch recolhido: mais espaço para a música, o timer e o relógio.",
-      "ru": "Ширина свёрнутого Clove Notch: больше места для песни, таймера и часов.",
-      "id": "Seberapa lebar Clove Notch saat diciutkan: lebih banyak ruang untuk lagu, timer, dan jam.",
-      "de": "Wie breit Clove Notch eingeklappt ist: mehr Platz für den Song, den Timer und die Uhr.",
-      "tr": "Clove Notch küçükken ne kadar geniş olsun: şarkı, zamanlayıcı ve saat için daha çok yer."
+    "Resting the pointer on Clove Notch opens a bar with its pages; it folds again when the pointer leaves. Click inside to keep it open.": {
+      "zh-Hans": "将指针停在 Clove Notch 上会打开一个包含其页面的栏；指针离开后它会再次收起。在其中点按可保持打开。",
+      "hi": "पॉइंटर को Clove Notch पर रोकने से उसके पेजों वाली एक पट्टी खुलती है; पॉइंटर हटते ही यह फिर सिमट जाती है। खुला रखने के लिए अंदर क्लिक करें।",
+      "es": "Al dejar el cursor sobre Clove Notch se abre una barra con sus páginas; se pliega de nuevo cuando el cursor sale. Haz clic dentro para dejarla abierta.",
+      "ar": "إبقاء المؤشر فوق Clove Notch يفتح شريطًا بصفحاته، ويُطوى مجددًا عندما يغادره المؤشر. انقر داخله لإبقائه مفتوحًا.",
+      "fr": "Laisser le pointeur sur Clove Notch ouvre une barre avec ses pages ; elle se replie quand le pointeur s'en va. Cliquez dedans pour la garder ouverte.",
+      "bn": "পয়েন্টার Clove Notch-এর উপর রাখলে এর পাতাগুলোর একটি বার খোলে; পয়েন্টার সরে গেলে এটি আবার গুটিয়ে যায়। খোলা রাখতে ভিতরে ক্লিক করুন।",
+      "pt-BR": "Deixar o cursor sobre o Clove Notch abre uma barra com as páginas dele; ela se recolhe quando o cursor sai. Clique dentro para mantê-la aberta.",
+      "ru": "Если задержать указатель на Clove Notch, откроется панель с его страницами; она свернётся, когда указатель уйдёт. Щёлкните внутри, чтобы она осталась открытой.",
+      "id": "Menahan kursor di atas Clove Notch membuka bilah berisi halamannya; bilah itu terlipat lagi saat kursor pergi. Klik di dalamnya agar tetap terbuka.",
+      "de": "Ruht der Mauszeiger auf Clove Notch, öffnet sich eine Leiste mit seinen Seiten; sie klappt wieder zu, sobald der Zeiger sie verlässt. Klicke hinein, damit sie geöffnet bleibt.",
+      "tr": "İşaretçiyi Clove Notch üzerinde tuttuğunda sayfalarının olduğu bir çubuk açılır; işaretçi ayrılınca yeniden kapanır. Açık tutmak için içine tıkla."
+    },
+    "The widest Clove Notch grows when folded small, to make room for a song, a timer or a score.": {
+      "zh-Hans": "Clove Notch 收起时最多能有多宽，为歌曲、计时器或比分留出空间。",
+      "hi": "छोटा होने पर Clove Notch अधिकतम कितना चौड़ा हो सकता है, ताकि गाने, टाइमर या स्कोर के लिए जगह बने।",
+      "es": "Lo más ancho que se pone Clove Notch plegado, para dejar sitio a una canción, un temporizador o un marcador.",
+      "ar": "أقصى عرض يبلغه Clove Notch وهو مطويّ، ليتّسع لأغنية أو مؤقّت أو نتيجة مباراة.",
+      "fr": "La largeur maximale de Clove Notch replié, pour laisser de la place à un morceau, un minuteur ou un score.",
+      "bn": "ছোট অবস্থায় Clove Notch সর্বোচ্চ কতটা চওড়া হবে, যাতে গান, টাইমার বা স্কোরের জায়গা হয়।",
+      "pt-BR": "A largura máxima do Clove Notch recolhido, para caber uma música, um timer ou um placar.",
+      "ru": "Наибольшая ширина свёрнутого Clove Notch — чтобы поместились песня, таймер или счёт.",
+      "id": "Lebar maksimum Clove Notch saat diciutkan, agar muat lagu, timer, atau skor.",
+      "de": "Wie breit Clove Notch eingeklappt höchstens wird: Platz für einen Song, einen Timer oder einen Spielstand.",
+      "tr": "Clove Notch küçükken en fazla ne kadar genişlesin: şarkı, zamanlayıcı ya da skor için yer."
     },
     "You replied": {
       "zh-Hans": "你已回复",
