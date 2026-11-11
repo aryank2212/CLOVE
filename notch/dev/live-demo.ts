@@ -7,6 +7,7 @@
 import { Live } from "../src/core/live";
 import { State } from "../src/core/state";
 import { LiveCtl, type SystemSnapshot } from "../src/live/control";
+import { LevelsCtl } from "../src/live/levels";
 import type { Island } from "../src/island/island";
 
 const now = () => Date.now();
@@ -95,5 +96,5 @@ export function installLiveDemo(island: Island) {
     window.setTimeout(() => (compact ? island.collapse() : island.openLive(null)), 200);
   };
   Object.assign(demo, { all: Object.keys(scenarios), reset, sys, hub: () => { reset(); island.openLive(null); } });
-  Object.assign(window, { demo, __live: { LiveCtl, Live, State, island } });
+  Object.assign(window, { demo, __live: { LiveCtl, Live, State, island, LevelsCtl } });
 }

@@ -417,6 +417,8 @@ export class CompactLive {
   private lead = div("lc-lead");
   private trail = div("lc-trail");
   private dots = div("lc-dots");
+  /** The right-hand side: the activity's end and the mic and camera dots, measured as one. */
+  private end = div("lc-end");
   private micDot = div("lc-dot mic");
   private camDot = div("lc-dot cam");
   private key = "";
@@ -425,7 +427,8 @@ export class CompactLive {
 
   constructor() {
     this.dots.append(this.camDot, this.micDot);
-    this.el.append(this.lead, this.trail, this.dots);
+    this.end.append(this.trail, this.dots);
+    this.el.append(this.lead, this.end);
   }
 
   /** True when the pill has something to wear. */
@@ -461,7 +464,7 @@ export class CompactLive {
     this.dots.classList.toggle("on", mic || cam);
 
     if (!primary && !mic && !cam) return 0;
-    return this.lead.offsetWidth + this.trail.offsetWidth + this.dots.offsetWidth;
+    return this.lead.offsetWidth + this.end.offsetWidth;
   }
 
   /**
@@ -1240,7 +1243,7 @@ export function buildDeviceStrip(): { el: HTMLElement; sync(): void } {
 type HubPanel = "tiles" | "timer" | "stocks" | "scores" | "navigate" | "status";
 
 const HUB_SIZE: Record<HubPanel, { w: number; h: number }> = {
-  tiles: { w: 316, h: 168 },
+  tiles: { w: 316, h: 178 },
   timer: { w: W, h: 150 },
   stocks: { w: W, h: 176 },
   scores: { w: W, h: 232 },

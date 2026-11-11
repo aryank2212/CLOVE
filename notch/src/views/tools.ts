@@ -7,6 +7,7 @@
 import { State } from "../core/state";
 import { Agenda, buildAgendaPanel, buildDayPanel } from "../live/agenda";
 import { buildDeviceStrip } from "../live/view";
+import { buildLevels } from "../live/levels";
 import type { ViewActions } from "./views";
 import {
   Tools, cityTime, clockText, isDay, nearestCity, subsolarPoint, type ClockTab,
@@ -152,7 +153,8 @@ export function buildControls(actions: ViewActions): ViewHost {
   void clock;
   const agenda = buildAgendaPanel(actions);
   const status = buildDeviceStrip();
-  const right = card(h("div", { class: "ctl-right" }, tileRow, status.el));
+  const levels = buildLevels();
+  const right = card(h("div", { class: "ctl-right" }, tileRow, levels.el, status.el));
   const el = h("div", { class: "view overview tools-view" }, h("div", { class: "left" }, card(agenda.el)), h("div", { class: "right" }, right));
 
   let artKey = "";
@@ -282,6 +284,7 @@ export function buildControls(actions: ViewActions): ViewHost {
     el,
     sync() {
       agenda.sync();
+      levels.sync();
       status.sync();
       if (State.view !== "controls") return;
       syncMusic();

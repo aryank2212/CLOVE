@@ -166,8 +166,13 @@ async function main() {
 
   // CLOVE fork: the header's mic button shows CLOVE's state (and stays right if CLOVE restarts).
 
+  // One unanswered question (CLOVE busy for a moment) keeps what is shown; only two in a row mean CLOVE isn't
+  // running. Blanking it on one miss made the mic button and the pill's mic blink.
+  let micMisses = 0;
   const cloveMicStatus = () => void Bridge.cloveMute("status").then((muted) => {
 
+    if (muted === null && ++micMisses < 2) return;
+    if (muted !== null) micMisses = 0;
     if (muted !== State.cloveMuted) {
 
       State.cloveMuted = muted;

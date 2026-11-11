@@ -134,7 +134,7 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   // Taller than a card, for two rows of items with their line.
   whatsNew: { height: 222, botX: 62, botY: null, botDiameter: 58, agentMode: "none" },
   // CLOVE fork: two cards a little taller than the overview's; no CLOVE drawn over them.
-  controls: { height: 216, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
+  controls: { height: 240, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
   time: { height: 212, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
   receive: { height: 176, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
   // A live activity's card (views/live.ts): it sizes itself, and CLOVE's mark steps aside.

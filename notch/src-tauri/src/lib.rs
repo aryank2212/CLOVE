@@ -954,6 +954,8 @@ pub fn run() {
             live::live_media_control,
             live::live_action,
             live::live_fetch,
+            live::live_levels,
+            live::live_set_level,
             clove_chat::clove_ctl,
             whatsapp::whatsapp_island,
             whatsapp::whatsapp_open,

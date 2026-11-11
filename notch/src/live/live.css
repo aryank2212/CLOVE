@@ -65,7 +65,7 @@
 }
 
 .lc-lead { transform-origin: left center; }
-.lc-trail { transform-origin: right center; margin-left: auto; }
+.lc-trail { transform-origin: right center; }
 
 .lc-label {
   max-width: 120px;
@@ -147,7 +147,6 @@
 
 .lc-dots.on { display: flex; }
 
-.lc-lead:empty + .lc-trail:empty + .lc-dots { margin-left: auto; }
 
 .lc-dot {
   width: 6px;

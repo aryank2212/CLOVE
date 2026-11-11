@@ -61,6 +61,7 @@ export const LI = {
   wave: "M3 12h1M7 8v8M11 4v16M15 7v10M19 10v4",
   user: "M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4.500 20a7.500 7.500 0 0 1 15 0",
   activity: "M3 12h4l2.500-7 5 14 2.500-7h4",
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4",
 } as const;
 
 export type LiveIcon = keyof typeof LI;

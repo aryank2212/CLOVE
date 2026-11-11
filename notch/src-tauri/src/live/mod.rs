@@ -56,6 +56,34 @@ pub async fn live_media_control(app: AppHandle, bus: String, action: String, val
     }
 }
 
+/// The speakers' volume (0…1, and whether they are muted) and the screen's brightness (0…1 on the same curve as
+/// the brightness keys; null without a backlight), for the Controls page's sliders.
+#[tauri::command]
+pub async fn live_levels() -> Value {
+    #[cfg(target_os = "linux")]
+    {
+        tauri::async_runtime::spawn_blocking(imp::levels).await.unwrap_or(Value::Null)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Value::Null
+    }
+}
+
+/// Moves a slider: `volume` or `brightness` to `value` (0…1), or `mute` (toggles). Answers with the levels now.
+#[tauri::command]
+pub async fn live_set_level(kind: String, value: Option<f64>) -> Value {
+    #[cfg(target_os = "linux")]
+    {
+        tauri::async_runtime::spawn_blocking(move || imp::set_level(&kind, value)).await.unwrap_or(Value::Null)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (kind, value);
+        Value::Null
+    }
+}
+
 /// The handful of things a card's button does to the machine.
 #[tauri::command]
 pub async fn live_action(app: AppHandle, action: String, arg: Option<String>) -> Value {
@@ -214,6 +242,50 @@ mod imp {
         };
         let lua = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
         dispatch(&["dispatch", &lua]) == "ok" || dispatch(&["dispatch", "focuswindow", &format!("address:{address}")]).contains("ok")
+    }
+
+    fn run(program: &str, args: &[&str]) -> Option<String> {
+        let out = Command::new(program).args(args).output().ok()?;
+        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+    }
+
+    /// The brightness keys move the backlight on a curve (`brightnessctl -e4`): the slider uses the same one, so
+    /// half-way on the slider looks half as bright, not a sixteenth.
+    const CURVE: f64 = 4.0;
+
+    pub fn levels() -> Value {
+        // "Volume: 0.67" or "Volume: 0.67 [MUTED]"
+        let volume = run("wpctl", &["get-volume", "@DEFAULT_AUDIO_SINK@"]);
+        let level = volume.as_deref().and_then(|v| v.split_whitespace().nth(1)).and_then(|v| v.parse::<f64>().ok());
+        let muted = volume.as_deref().is_some_and(|v| v.contains("[MUTED]"));
+        // "amdgpu_bl2,backlight,65535,100%,65535": device, class, value, percent, maximum
+        let brightness = run("brightnessctl", &["-c", "backlight", "-m"]).and_then(|line| {
+            let parts: Vec<&str> = line.lines().next()?.split(',').collect();
+            let (now, max) = (parts.get(2)?.parse::<f64>().ok()?, parts.get(4)?.parse::<f64>().ok()?);
+            (max > 0.0).then(|| (now / max).clamp(0.0, 1.0).powf(1.0 / CURVE))
+        });
+        json!({ "volume": level.map(|v| v.min(1.0)), "muted": muted, "brightness": brightness })
+    }
+
+    pub fn set_level(kind: &str, value: Option<f64>) -> Value {
+        match (kind, value) {
+            ("volume", Some(v)) => {
+                let v = format!("{:.2}", v.clamp(0.0, 1.0));
+                let _ = run("wpctl", &["set-volume", "-l", "1", "@DEFAULT_AUDIO_SINK@", &v]);
+                // Turning the sound up is wanting to hear it.
+                let _ = run("wpctl", &["set-mute", "@DEFAULT_AUDIO_SINK@", "0"]);
+            }
+            ("mute", _) => {
+                let _ = run("wpctl", &["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]);
+            }
+            ("brightness", Some(v)) => {
+                // Never all the way down: a black screen can't be turned back up from the notch.
+                let pct = format!("{:.0}%", v.clamp(0.08, 1.0) * 100.0);
+                let _ = run("brightnessctl", &["-q", "-c", "backlight", "-e4", "-n2", "set", &pct]);
+            }
+            _ => {}
+        }
+        levels()
     }
 
     fn memo_dir() -> PathBuf {

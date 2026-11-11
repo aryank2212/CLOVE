@@ -234,6 +234,8 @@ export class Island {
       },
       toggleCloveMic: () => {
         void Bridge.cloveMute("toggle").then((muted) => {
+          // No answer: the state shown stays as it was rather than blanking the button.
+          if (muted === null) return;
           State.cloveMuted = muted;
           State.notify();
         });
@@ -974,6 +976,8 @@ export class Island {
     this.islandEl.classList.toggle("gone", hh < 1);
     this.live.el.style.right = `${12 + this.statusWidth()}px`;
     this.live.bubble.style.left = `${w + BUBBLE_GAP}px`;
+    // Level with the pill, and with the bar it opens into: centred on whichever is there.
+    this.live.bubble.style.top = `${Math.min(8, Math.max(0, (hh - BUBBLE) / 2))}px`;
     // These follow Clove Notch as it resizes, so they belong here rather than in
     // the state-driven DOM sync.
     this.miniGrid.style.left = `${w - 29 - 12}px`;
