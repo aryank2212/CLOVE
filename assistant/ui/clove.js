@@ -775,7 +775,7 @@ setInterval(freshness, 1000);
 document.querySelectorAll('.hero').forEach(el => backdrop(el.querySelector('canvas.backdrop'), el.dataset.color));
 presence($('presence'));
 requestAnimationFrame(() => stillMark($('logo'), 11, 0.35));
-S.muted = store.get('muted', false);
+S.muted = false;                 // always listening when CLOVE starts: a mute lasts until it is undone or CLOVE restarts
 show(params.get('view') || store.get('view', 'chat'), true);
 renderState(); renderMic(); renderTask(); renderJobs(); renderWorkspace(); renderSettings(); emptyState(); autoCompact();
 connect();

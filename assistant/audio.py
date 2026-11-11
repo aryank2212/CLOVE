@@ -52,6 +52,8 @@ class Speaker:
         self._stream.start()
 
     def write(self, pcm: bytes):
+        if getattr(self, "silent", False):       # "mute audio" on Clove Notch: nothing is played, speech or sounds
+            return
         with self._lock:
             self._buf.extend(pcm)
 

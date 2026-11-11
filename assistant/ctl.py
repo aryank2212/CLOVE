@@ -41,6 +41,7 @@ async def command(a, line: str) -> str:
     if cmd == "dictate":
         return a.dictation.toggle()
     if cmd == "wake":
+        a.set_muted(False)                       # asked to listen: a muted microphone would hear nothing
         a.wake.wake("hotkey")
         import sounds
         sounds.play(a, "wake")
@@ -64,6 +65,12 @@ async def command(a, line: str) -> str:
     if cmd == "mute":                            # Clove Notch's mic button: mute on|off|toggle|status
         want = {"on": True, "off": False, "toggle": not a.muted}.get(arg.strip().lower(), a.muted)
         return "muted" if a.set_muted(want) else "listening"
+    if cmd == "speech":                          # Clove Notch's sound button: speech on|off|toggle|status
+        want = {"off": True, "on": False, "toggle": not a.silent}.get(arg.strip().lower(), a.silent)
+        return "silent" if a.set_silent(want) else "speaking"
+    if cmd == "agenda":                          # Clove Notch's tasks, reminders and calendar: one JSON request, one JSON answer
+        import agenda
+        return await asyncio.to_thread(agenda.handle, arg)
     if cmd == "message" and arg:                 # a new message from Clove Notch's WhatsApp link (with who, number, text)
         return incoming_message(a, arg)
     if cmd == "chat":                            # Clove Notch's chat (clove_chat.rs): answers as JSON
@@ -78,7 +85,7 @@ async def command(a, line: str) -> str:
     if cmd == "status":
         return (f"brain={a.active} state={a.compute_state()} jobs={len(a.jobs.running())} "
                 f"dictating={a.dictation.on} focus={a.focus.remaining()}")
-    return ("commands: dictate, wake, sleep, mute [on|off|toggle], say <text>, ask <text>, agent_ask <question>, context, "
+    return ("commands: dictate, wake, sleep, mute [on|off|toggle], speech [on|off|toggle], say <text>, ask <text>, agent_ask <question>, context, "
             "focus <minutes>, status")
 
 

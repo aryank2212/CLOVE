@@ -23,7 +23,8 @@ def wanted_version() -> str:
 ACTIONS = ("context", "tabs", "read", "text", "selected", "links", "find", "open", "new_window", "close", "switch", "navigate",
            "back", "forward", "reload", "pin", "unpin", "mute", "unmute", "duplicate", "reopen", "zoom", "group", "history",
            "bookmark", "click", "hover", "drag", "check", "type", "clear", "fill", "key", "scroll", "wait_for", "media", "batch",
-           "wa_chat", "wa_send", "wa_join_call", "chat_links", "call_state", "call_isolate", "call_release", "wait")
+           "wa_chat", "wa_send", "wa_join_call", "chat_links", "call_state", "call_isolate", "call_release", "wait",
+           "move", "merge_windows", "sort", "ungroup", "window_state", "audible", "discard", "translate", "download", "pdf")
 
 
 def version_key(v: str) -> tuple:

@@ -42,6 +42,9 @@ whenever Chrome runs; CLOVE opens Chrome itself when it needs the browser.
 |---|---|
 | "open my LeetCode bookmark", "open a terminal", "what time is it" | Clove, instantly |
 | "write a script that…", "make a note…", "volume down", "pause the music", "remind me in 20 minutes" | Clove, instantly |
+| "remind me tomorrow at 9 to call the bank", "move that reminder to 10", "add renew passport by friday to my list", "what's on my calendar today?" | Clove: kept until due (also across restarts), and shown on Clove Notch's Controls and Time pages |
+| "open a terminal and run htop", "quit Steam", "force quit Chrome" | Clove: your own terminal (`$TERMINAL` / `xdg-terminal-exec`); quitting closes the app's windows (force quit asks first) |
+| "download that PDF", "save this page as a PDF", "translate this page to Hindi", "put all my tabs in one window", "which tab is playing sound?" | Clove Hands, in your Chrome |
 | "install htop", "maximize Chrome" (needs the Window Calls extension) | Clove, after you approve the plan |
 | "add a settings page to my clove project", "build me a Flask app…" | Claude Code in a terminal (complex work only) |
 | "star the anthropic SDK repo on GitHub", "fill in this form" | Claude in Chrome |

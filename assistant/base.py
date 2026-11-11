@@ -118,9 +118,11 @@ class Assistant:
         from notch import Notch
         self.notch = Notch(self)             # Clove Notch app at the top of the screen, when it runs
         self._notch_utt = -1
+        self._notch_said = ""                # his last answer, for Clove Notch's voice card
         self.connected = False
         # audio / visual state
-        self.muted = False            # muted: CLOVE neither listens nor speaks (Clove Notch's mic button, the window)
+        self.muted = False            # muted: CLOVE does not listen (Clove Notch's mic button, the window)
+        self.silent = False           # silent: CLOVE does not speak or play sounds (Clove Notch's sound button)
         self.held_notes: list[str] = []   # what came in while muted, told on unmute
         self.mode = "off"             # Clove Notch's Work / DND / Sleep (set_mode)
         self._mode_muted = False      # Sleep muted CLOVE (so leaving Sleep unmutes it)
@@ -166,7 +168,7 @@ class Assistant:
     async def notify(self, note: str):
         """A system note for the model (reminder due, job finished) - not a user request. While he has CLOVE muted
         it is kept, and told when he unmutes. The same in Do Not Disturb and Sleep."""
-        if self.muted or getattr(self, "mode", "off") in ("dnd", "sleep"):
+        if self.silent or getattr(self, "mode", "off") in ("dnd", "sleep"):
             self.held_notes.append(note)
             return
         if self.brain and self.connected:
@@ -181,7 +183,7 @@ class Assistant:
                                       "details that aren't in this result.)"))
 
     async def deliver_job(self, job: Job):
-        if self.muted or getattr(self, "mode", "off") in ("dnd", "sleep"):
+        if self.silent or getattr(self, "mode", "off") in ("dnd", "sleep"):
             self.held_notes.append(self.job_note(job))
             return
         if self.brain and self.connected:
@@ -201,6 +203,7 @@ class Assistant:
             if role == "assistant":
                 self._notch_prompt()
                 self.notch.reply(text)
+                self._notch_said = text
             try:
                 memory.add_turn(role, text)          # kept on disk, so it still knows after a restart
             except Exception:
@@ -335,12 +338,27 @@ class Assistant:
         changed = on != self.muted
         self.muted = on
         if changed:
-            log.info("CLOVE %s", "muted (not listening, not speaking)" if on else "unmuted")
+            log.info("CLOVE's microphone %s", "muted (not listening)" if on else "on")
             self.ui.send(type="muted", value=on)
             if getattr(self, "notch", None) is not None:
                 self.notch.event("CloveMute", muted=on)
-        if on and getattr(self, "speaker", None):
-            self.speaker.clear()                  # stop mid-sentence
+        return on
+
+    def set_silent(self, on: bool) -> bool:
+        """Stop or start speaking and playing sounds (Clove Notch's sound button). The microphone is not touched:
+        he can still be asked things, and answers in the window and on the notch. What he would have said aloud
+        meanwhile is kept and told when the sound comes back."""
+        on = bool(on)
+        changed = on != self.silent
+        self.silent = on
+        if getattr(self, "speaker", None):
+            self.speaker.silent = on
+            if on:
+                self.speaker.clear()              # stop mid-sentence
+        if changed:
+            log.info("CLOVE's voice %s", "muted (not speaking)" if on else "on")
+            if getattr(self, "notch", None) is not None:
+                self.notch.event("CloveSpeech", silent=on)
         if changed and not on and self.held_notes:
             notes, self.held_notes = self.held_notes, []
             try:
@@ -641,11 +659,14 @@ class Assistant:
 
     # ---- reminders & jobs ------------------------------------------------------------
     def set_reminder(self, minutes: float, message: str) -> str:
-        if not 0 < minutes <= 24 * 60:
-            return "error: minutes must be between 0 and 1440"
-        when = time.strftime("%H:%M", time.localtime(time.time() + minutes * 60))
-        self.loop.call_later(minutes * 60, lambda: asyncio.create_task(self._remind(message)))
-        return f"reminder set for {when}"
+        if minutes <= 0:
+            return "error: minutes must be more than 0"
+        import agenda                             # kept on disk: a restart no longer loses it (agenda.run says it)
+        return agenda.reminder_add(message, at=time.time() + minutes * 60)
+
+    async def _agenda(self):
+        import agenda
+        await agenda.run(self)
 
     async def _remind(self, message: str):
         import desktop
@@ -770,7 +791,7 @@ class Assistant:
         bridge.on_stale = lambda have, want: (log.warning("Chrome extension is out of date (v%s, need v%s)", have, want),
                                               self.ui.send(type="notice", text=f"Reload the Clove Hands extension in Chrome (v{have} loaded, v{want} available): chrome://extensions"))
         await bridge.start()
-        tasks = [asyncio.create_task(c) for c in (self._ticker(), self._watch_audio_route(), self._narrator(), self._memory_keeper(), self._screen_feeder(), self._ctl(), self._phone(), self.messages.run(), self.away.run(), self.call_watch.run(), self.instagram.run(), self.media.run(),
+        tasks = [asyncio.create_task(c) for c in (self._ticker(), self._agenda(), self._watch_audio_route(), self._narrator(), self._memory_keeper(), self._screen_feeder(), self._ctl(), self._phone(), self.messages.run(), self.away.run(), self.call_watch.run(), self.instagram.run(), self.media.run(),
                                                      self.dashboard.run())]
         self.send_engine()
         if not first:
@@ -857,5 +878,11 @@ class Assistant:
                 self.heard, self.awaiting, self.await_since = False, True, now
             if self.awaiting and now - self.await_since > 30:
                 self.awaiting = False
-            self.ui.send(type="tick", state=self.compute_state(), mic=round(self.mic_level, 3),
+            state = self.compute_state()
+            # Clove Notch shows the conversation as it goes: what it heard, then the answer.
+            # Room noise while asleep reads as "listening" too: only a conversation he started counts.
+            spoken = state in ("thinking", "working", "speaking") or (state == "listening" and self.wake.awake(now))
+            self.notch.voice(state if spoken else "idle", self.user_utt.strip(),
+                             self._notch_said if state == "speaking" else "")
+            self.ui.send(type="tick", state=state, mic=round(self.mic_level, 3),
                          out=round(self.speaker.level if self.speaker else 0.0, 3), tasks=len(self.jobs.running()))

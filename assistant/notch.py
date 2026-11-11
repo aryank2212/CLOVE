@@ -123,6 +123,28 @@ class Notch:
         else:
             self.event("StopFailure", message=f"{label[:80]} failed")
 
+    # ---- live activities (notch/src/core/live.ts) ---------------------------------------------------
+    def live(self, op: str, **fields):
+        """Show something live on Clove Notch: a timer, a route, a stock, the voice conversation. One JSON line
+        `{"live": {"op": …}}` on the same socket; fire and forget."""
+        if self.available:
+            if self.queue is None:
+                self.queue = asyncio.Queue()
+            if self.worker is None or self.worker.done():
+                self.worker = asyncio.ensure_future(self._drain())
+            self.queue.put_nowait(({"live": {"op": op, **fields}}, None))
+
+    def voice(self, phase: str, heard: str = "", reply: str = ""):
+        """Where the spoken conversation is: listening, thinking, working, speaking, or idle (over)."""
+        state = (phase, heard, reply)
+        if state == getattr(self, "_voice", None):
+            return
+        self._voice = state
+        fields = {"phase": phase}
+        if phase != "idle":
+            fields.update(heard=heard[:200], reply=reply[:300])
+        self.live("voice", **fields)
+
     # ---- approvals ---------------------------------------------------------------------------------
     def ask_approval(self, plan: dict):
         """A plan needs his yes: put an Allow / Deny card on Clove Notch. Whichever answer comes first wins, the
