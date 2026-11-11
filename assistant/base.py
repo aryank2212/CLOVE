@@ -10,7 +10,7 @@ import time
 import config
 import memory
 import screen
-from audio import pick_route
+from audio import MicFollower, pick_route
 from daymem import DayMemory
 from jobs import Job, Jobs
 from routines import Routines
@@ -832,13 +832,17 @@ class Assistant:
     async def _watch_audio_route(self):
         """Follow the system's audio devices: when headphones connect or disconnect, the speaker moves by itself
         (PipeWire), and the microphone is re-pointed here without restarting Clove."""
+        follow = MicFollower()
         while True:
             await asyncio.sleep(3)
             route = await asyncio.to_thread(pick_route)
-            if self.mic and self.mic.device is None and route.source != self.mic.source:
-                log.info("microphone %s -> %s", self.mic.source, route.source)
+            if not route.ok:                       # PipeWire didn't answer properly: keep the mic and speaker in use
+                continue
+            switch_to = follow.step(self.mic.source, route) if self.mic and self.mic.device is None else None
+            if switch_to is not None:
+                log.info("microphone %s -> %s", self.mic.source, switch_to)
                 try:
-                    await asyncio.to_thread(self.mic.reopen, route.source)
+                    await asyncio.to_thread(self.mic.reopen, switch_to)
                     self.noise_floor, self.mic_chunks = 0.01, 0          # recalibrate to the new mic
                 except Exception as e:
                     log.warning("could not switch microphone: %s", e)
