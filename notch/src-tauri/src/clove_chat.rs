@@ -79,6 +79,44 @@ pub async fn clove_tell(text: String) -> Result<(), String> {
     tokio::time::timeout(Duration::from_secs(10), talk).await.map_err(|_| "CLOVE didn't answer.".to_string())?
 }
 
+/// The notch's sound button, for CLOVE's own voice: "toggle", "on", "off" or "status". Returns whether CLOVE is
+/// silent now (it neither speaks nor plays its sounds; it still listens and answers in writing).
+#[tauri::command]
+pub async fn clove_speech(action: String) -> Result<bool, String> {
+    let action = match action.as_str() { "toggle" | "on" | "off" => action, _ => "status".into() };
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.map_err(|_| "CLOVE isn't running.".to_string())?;
+        stream.write_all(format!("speech {action}\n").as_bytes()).await.map_err(|e| e.to_string())?;
+        let mut reader = BufReader::new(stream);
+        let mut out = String::new();
+        reader.read_line(&mut out).await.map_err(|e| e.to_string())?;
+        match out.trim() {
+            "silent" => Ok(true),
+            "speaking" => Ok(false),
+            other => Err(format!("CLOVE: {other}")),
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(5), talk).await.map_err(|_| "CLOVE didn't answer.".to_string())?
+}
+
+/// Tasks, reminders and the calendar (the notch's agenda panel): one JSON request to CLOVE, its JSON answer back.
+/// CLOVE keeps them (assistant/agenda.py), so they are the same ones it reads out and changes by voice.
+#[tauri::command]
+pub async fn clove_agenda(request: String) -> Result<String, String> {
+    // One line on the wire: a request with a line break in it would be two commands.
+    if request.len() > 4000 || request.contains(['\n', '\r']) || serde_json::from_str::<Value>(&request).is_err() {
+        return Err("not a request".into());
+    }
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.map_err(|_| "CLOVE isn't running: start it to keep tasks and reminders.".to_string())?;
+        stream.write_all(format!("agenda {request}\n").as_bytes()).await.map_err(|e| e.to_string())?;
+        let mut out = String::new();
+        BufReader::new(stream).read_line(&mut out).await.map_err(|e| e.to_string())?;
+        Ok(out.trim().to_string())
+    };
+    tokio::time::timeout(Duration::from_secs(25), talk).await.map_err(|_| "CLOVE took too long to answer.".to_string())?
+}
+
 /// The notch's mic button: "toggle", "on", "off" or "status". Returns whether CLOVE is muted now.
 #[tauri::command]
 pub async fn clove_mute(action: String) -> Result<bool, String> {
@@ -120,4 +158,21 @@ pub async fn send(chat: &Chat, query: String, context: Option<ChatContext>) -> R
     chat.commit(&turn, json!({ "role": "user", "content": asked }), json!({ "role": "assistant", "content": answer }),
                 &query, &answer);
     Ok(ChatReply { text: answer })
+}
+
+/// The few one-word commands Clove Notch gives the assistant over the same socket: `wake` makes it listen now
+/// (the mic button on the notch), as saying its name does. Its one-line answer comes back.
+#[tauri::command]
+pub async fn clove_ctl(command: String) -> Result<String, String> {
+    if !matches!(command.as_str(), "wake" | "sleep" | "status" | "dictate") {
+        return Err("not a command the notch gives".into());
+    }
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.map_err(|_| "CLOVE isn't running.".to_string())?;
+        stream.write_all(format!("{command}\n").as_bytes()).await.map_err(|e| e.to_string())?;
+        let mut out = String::new();
+        BufReader::new(stream).read_line(&mut out).await.map_err(|e| e.to_string())?;
+        Ok(out.trim().to_string())
+    };
+    tokio::time::timeout(Duration::from_secs(6), talk).await.map_err(|_| "CLOVE took too long to answer.".to_string())?
 }

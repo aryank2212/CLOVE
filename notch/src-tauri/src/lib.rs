@@ -18,6 +18,7 @@ mod i18n;
 mod identity;
 mod integrations;
 mod island;
+mod live;
 mod local_chat;
 mod localsend;
 mod log;
@@ -877,6 +878,8 @@ pub fn run() {
             clove_window::clove_start,
             clove_chat::clove_tell,
             clove_chat::clove_mute,
+            clove_chat::clove_speech,
+            clove_chat::clove_agenda,
             controls::controls_status,
             controls::controls_action,
             controls::media_state,
@@ -947,6 +950,11 @@ pub fn run() {
             spotify::spotify_control,
             spotify::spotify_open,
             spotify::spotify_installed,
+            live::live_start,
+            live::live_media_control,
+            live::live_action,
+            live::live_fetch,
+            clove_chat::clove_ctl,
             whatsapp::whatsapp_island,
             whatsapp::whatsapp_open,
             whatsapp::whatsapp_close,

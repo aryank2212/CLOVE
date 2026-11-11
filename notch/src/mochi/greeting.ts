@@ -8,7 +8,7 @@ import { drawCloveMark, type RGB } from "./engine";
 
 const CLOVE_ACCENT: RGB = [0.984, 0.573, 0.235]; // #FB923C, the CLOVE orange
 import { Sound } from "../core/sound";
-import { COMPACT_W, NOTCH_H, NOTCH_W } from "../core/layout";
+import { COMPACT_BOT_X, COMPACT_W, NOTCH_H, NOTCH_W } from "../core/layout";
 
 // ── Timing (GT in the Swift file) ─────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ export const GREETING_H = 150;
 const C0 = { x: 320, y: 90 };
 const HB = 58;
 export const ASP = 1.34;
-const EAR_X = 40;
+const EAR_X = COMPACT_BOT_X;
 const EAR_HB = 17;
 const CARD = { x: 10, y: 36, w: 620, h: 104 };
 const CARD_R = 20;

@@ -4,15 +4,15 @@
 import { Tracked, Spring, clamp } from "../core/anim";
 import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
 import {
-  EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
-  ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
+  COMPACT_CLOCK_W, COMPACT_MAX_W, COMPACT_W, EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
+  ROUNDED_CORNER, TOP_GAP, VIEW_LAYOUTS, botPosition, chatPromptHeight,
   islandSize,
   QUESTION_PICKER_H,
-  type BotEmoteName, type IslandMode, type IslandViewName, setCompactWidth, COMPACT_W } from "../core/layout";
+  type BotEmoteName, type IslandMode, type IslandViewName, compactWidth, setCompactWidth } from "../core/layout";
 import { FlowBridge } from "../core/flow";
 import { Sound } from "../core/sound";
+import { sanitizeDeclared, toggleDeclared } from "../core/pills";
 import { State } from "../core/state";
-import { Tools, clockText, type LiveActivity } from "../core/tools";
 import { LocalSend } from "../core/localsend";
 import { t } from "../i18n/i18n";
 import { APP_LOGOS } from "../views/logos";
@@ -27,6 +27,8 @@ import { USC, UploadSeq } from "../upload/sequence";
 import { closePlanCard, openPlanColor, planCardOpen } from "../views/usage";
 import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
 import { h, svg } from "../views/dom";
+import { CompactLive, accentOf, buildLive, type LiveView } from "../live/view";
+import { Live } from "../core/live";
 import { IslandStateMachine } from "./fsm";
 import { refreshHookPills } from "./integrations";
 import { DesktopLink } from "./desktop";
@@ -42,6 +44,18 @@ const CLAUDE_DESKTOP_ID = "agent_claude-desktop";
 const BOT_SIDE = 24;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
 const HIT_MARGIN = 14;
+
+/** The header's height with its margin (#header in live.css): added above a live card opened by hand. */
+const HEADER_H = 34;
+
+/** Pages narrower than the island's widest; the header can still make them wider (barWidth). */
+const VIEW_WIDTH: Partial<Record<IslandViewName, number>> = {
+  overview: 560, empty: 520, settings: 560,
+};
+
+/** The circle beside the pill: notifications, and the way into the launcher. */
+const BUBBLE = 36;
+const BUBBLE_GAP = 8;
 
 /** The three views the drop sequence owns; leaving them stops the engine. */
 const UPLOAD_VIEWS: ReadonlySet<IslandViewName> = new Set(["upload", "uploading", "choose"]);
@@ -59,6 +73,7 @@ export class Island {
   private root: HTMLElement;
   private islandEl!: HTMLElement;
   private clipEl!: HTMLElement;
+  private ambientEl!: HTMLElement;
   private contentEl!: HTMLElement;
   private viewsEl!: HTMLElement;
   private botCanvas!: HTMLCanvasElement;
@@ -69,6 +84,18 @@ export class Island {
   private clockTimer?: number;
   private countdown!: HTMLElement;
   private wakeStrip!: HTMLElement;
+
+  /** What the compact pill wears for the live activities, and their card. */
+  private live = new CompactLive();
+  private liveView!: LiveView;
+  /** Width the pill's live content asks for, 0 when it wears nothing. */
+  private liveWidth = 0;
+  private bannerTimer: number | null = null;
+  private hoverTimer: number | null = null;
+  /** The size the island is animating towards. */
+  private aimed = { w: 0, h: 0 };
+  /** The next open goes to the live card (a banner, or the bubble). */
+  private openOnLive = false;
 
   private header!: ViewHost;
   private views!: Map<IslandViewName, ViewHost>;
@@ -193,6 +220,18 @@ export class Island {
       tellClove: (text: string) => void Bridge.cloveTell(text),
       flowAction: (action) => void FlowBridge.pillAction(action),
       pickFiles: () => void this.pickFiles(),
+      removePill: (id) => {
+        const declared = sanitizeDeclared(State.settings, State.os);
+        if (!declared.activeIntegrations.includes(id)) return;
+        const next = toggleDeclared(declared, id, State.os);
+        if (!next) return;
+        State.settings.activeIntegrations = next;
+        State.loadIntegrationTasks();
+        if (State.focusId === id) State.setFocus(State.mainPillId);
+        void Bridge.saveSettings(State.settings);
+        Sound.play("pop");
+        State.notify();
+      },
       toggleCloveMic: () => {
         void Bridge.cloveMute("toggle").then((muted) => {
           State.cloveMuted = muted;
@@ -248,6 +287,8 @@ export class Island {
       toggleSound: () => {
         State.settings.soundEnabled = !State.settings.soundEnabled;
         Sound.setEnabled(State.settings.soundEnabled);
+        // One switch for everything heard: the notch's sounds and CLOVE's own voice.
+        void Bridge.cloveSpeech(State.settings.soundEnabled ? "on" : "off");
         void Bridge.saveSettings(State.settings);
         State.notify();
       },
@@ -305,6 +346,15 @@ export class Island {
 
     this.header = buildHeader(actions);
     this.views = buildViews(actions, () => this.animateGeometry(false));
+    this.liveView = buildLive(actions);
+    this.views.set("live", this.liveView);
+    // The circle beside the pill opens the launcher: timer, memo, status and the rest.
+    this.live.bubble.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      if (e.button !== 0) return;
+      Sound.resume();
+      this.openLauncher();
+    });
     this.viewsEl = h("div", { id: "views" });
     for (const v of this.views.values()) this.viewsEl.append(v.el);
     this.contentEl = h("div", { id: "content" }, this.header.el, this.viewsEl);
@@ -321,12 +371,16 @@ export class Island {
       cancel: () => this.discardDrop(),
     });
 
+    // Two soft lights in the open page's colour, behind everything: what the frosted panels blur.
+    this.ambientEl = h("div", { id: "island-ambient" }, h("i"), h("i"));
     this.clipEl = h(
       "div",
       { id: "island-clip" },
+      this.ambientEl,
       this.greetingCanvas,
       this.uploadCanvas.el,
       this.contentEl,
+      this.live.el,
     );
     this.islandEl = h(
       "div",
@@ -337,6 +391,7 @@ export class Island {
       this.miniGrid,
       this.clockEl,
       this.countdown,
+      this.live.bubble,
     );
 
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -344,6 +399,17 @@ export class Island {
     this.greetingCanvas.height = Math.round(150 * dpr);
     this.greetingCanvas.style.width = `${EXPANDED_W}px`;
     this.greetingCanvas.style.height = "150px";
+
+    // The island's boxes clip and never scroll: a field taking focus (or anything scrolling an element into view)
+    // would otherwise shift a whole page up inside the island, out of reach.
+    for (const box of [this.clipEl, this.contentEl, this.viewsEl]) {
+      box.addEventListener("scroll", () => {
+        if (box.scrollTop || box.scrollLeft) {
+          box.scrollTop = 0;
+          box.scrollLeft = 0;
+        }
+      });
+    }
 
     this.root.append(this.wakeStrip, this.islandEl);
     this.applyGeometry();
@@ -353,7 +419,7 @@ export class Island {
 
   private wireFsm() {
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
-    this.fsm.openOnHover = State.settings.openOnHover;
+    this.fsm.openOnHover = true;   // a resting pointer opens the bar (or, with the setting on, the page)
     this.fsm.keepVisible = State.settings.keepVisible !== false;
     this.fsm.onTransition = (from, to) => {
       // The greeting is over, however it ended: back to his desktop spot.
@@ -396,14 +462,18 @@ export class Island {
     const prev = State.mode;
     if (mode === prev) return;
     State.mode = mode;
-    if (mode === "expanded") Sound.play("open");
+    // The bar a resting pointer opens comes and goes without a sound.
+    const quiet = this.fsm.openedByHover || State.view === "bar";
+    if (mode === "expanded" && !quiet) Sound.play("open");
     if (prev === "expanded") {
-      Sound.play("close");
+      if (!quiet) Sound.play("close");
       // A folded card is still waiting: it keeps Clove Notch pinned.
       if (!State.pendingApproval) State.isPinned = false;
       void Bridge.focusWindow(false);
     }
     if (mode !== "expanded") {
+      this.endBanner(false);
+      Live.focusId = null;
       closePlanCard();
       this.engine.resetMorph();
       // Nothing can be seen of the sequence once Clove Notch is shut, and leaving
@@ -437,6 +507,8 @@ export class Island {
   }
 
   setView(view: IslandViewName) {
+    // Asked for by hand: the live view with its dock, not a passing banner.
+    if (view === "live") this.endBanner(false);
     this.stopSequenceIfLeaving(view);
     if (view !== "overview") closePlanCard();
     if (State.mode !== "expanded") {
@@ -485,7 +557,86 @@ export class Island {
    * permission or question always comes first.
    */
   private openingView(): IslandViewName {
-    return this.updateHintOn() ? "update" : State.defaultView();
+    if (this.openOnLive && !State.pendingApproval) return "live";
+    // A resting pointer opens only the bar of pages, unless Settings says a hover opens everything.
+    if (this.fsm.openedByHover && !State.settings.openOnHover && !State.pendingApproval) return "bar";
+    if (this.updateHintOn()) return "update";
+    const usual = State.defaultView();
+    // Something live and no agent at work: the pill opens on what it is wearing.
+    const quiet = State.effectiveState === "idle" || State.effectiveState === "sleeping";
+    return Live.size > 0 && quiet && (usual === "overview" || usual === "empty") ? "live" : usual;
+  }
+
+  // ── Live activities ─────────────────────────────────────────────────────────
+
+  /** The launcher: start a timer or a memo, see the machine's status. */
+  openLauncher() {
+    this.liveView.openHub();
+    this.openLive(null);
+  }
+
+  /** Opens the live view on one activity (null: the most important) and keeps it open. */
+  openLive(id: string | null) {
+    if (State.paused) return;
+    this.endBanner(false);
+    Live.focusId = id;
+    if (State.mode === "expanded") {
+      this.setView("live");
+      return;
+    }
+    this.openOnLive = true;
+    this.fsm.forceHome();
+    this.openOnLive = false;
+  }
+
+  /**
+   * Something just happened (a call, a payment, a timer ringing): its card
+   * opens by itself for a moment, then the island folds back. Never over a
+   * view the user is in, or a request waiting for an answer.
+   */
+  liveBanner(id: string, ms: number) {
+    if (State.paused || State.pendingApproval || !Live.get(id)) return;
+    if (State.mode === "expanded" && !(State.view === "live" && this.liveView.banner)) {
+      // Already looking at the live view: bring the news to the front there.
+      if (State.view === "live") {
+        Live.focusId = id;
+        this.animateGeometry(false);
+        State.notify();
+      }
+      return;
+    }
+    Live.focusId = id;
+    this.liveView.setBanner(true);
+    this.fsm.pinned = true;
+    if (State.mode !== "expanded") {
+      this.openOnLive = true;
+      this.fsm.forceHome();
+      this.openOnLive = false;
+    } else {
+      this.animateGeometry(false);
+      State.notify();
+    }
+    if (this.bannerTimer != null) window.clearTimeout(this.bannerTimer);
+    this.bannerTimer = window.setTimeout(() => this.endBanner(true), ms);
+  }
+
+  /** The banner is over: fold back (`fold`), or stay open as an ordinary live view. */
+  private endBanner(fold: boolean) {
+    if (this.bannerTimer != null) window.clearTimeout(this.bannerTimer);
+    this.bannerTimer = null;
+    if (!this.liveView?.banner) return;
+    this.liveView.setBanner(false);
+    this.fsm.pinned = State.isPinned || State.pendingApproval != null || this.holdingOpen;
+    if (State.mode !== "expanded" || State.view !== "live") return;
+    // The pointer is on it: it is being read, so it stays as an ordinary open view.
+    if (fold && !this.wasInIsland) {
+      Live.focusId = null;
+      this.fsm.forcePetit();
+    } else {
+      this.animateGeometry(false);
+      if (!this.wasInIsland) this.fsm.mouseLeft();
+      State.notify();
+    }
   }
 
   reveal() {
@@ -733,12 +884,71 @@ export class Island {
     if (State.mode === "expanded" && State.view === "question" && State.pendingApproval?.questions) {
       h = QUESTION_PICKER_H;
     }
-    const r = State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER;
+    if (State.mode === "expanded" && State.view === "live") {
+      ({ w, h } = this.liveView.size());
+      // Opened by hand, a card has the header above it like every page; a banner is the card alone.
+      if (!this.liveView.banner) {
+        w = Math.max(w, this.barWidth());
+        h += HEADER_H;
+      }
+    }
+    // A page as wide as what it shows (and its header), not the widest page's width.
+    const fit = State.mode === "expanded" ? VIEW_WIDTH[State.view] : undefined;
+    if (fit) w = Math.max(fit, this.barWidth());
+    if (State.mode === "expanded" && State.view === "bar") w = this.barWidth();
+    if (State.mode === "compact") w = this.pillWidth();
+    // Never rounder than a pill: a short card keeps its ends round, not pointed.
+    const r = Math.min(State.mode === "expanded" ? EXPANDED_CORNER : ROUNDED_CORNER, h / 2);
     return { w, h, r };
+  }
+
+  /** The colour of the light behind the glass: the open page's, or the activity or session in front. */
+  private glowColor(): string {
+    switch (State.view) {
+      case "live": {
+        const a = this.liveView.hubShown ? null : Live.focused(Date.now());
+        return a ? accentOf(a) : "#fb923c";
+      }
+      case "overview":
+      case "empty": return State.focusTask?.color ?? "#5e5ce6";
+      case "controls": return "#64d2ff";
+      case "time": return "#ff9f0a";
+      case "prompt": return "#fb923c";
+      case "upload":
+      case "uploading":
+      case "choose": return "#30d158";
+      case "approval": return "#f5a524";
+      case "question": return "#22d3ee";
+      case "error": return "#f4505e";
+      case "finished": return "#34d399";
+      default: return "#5e5ce6";
+    }
+  }
+
+  /** The bar is as wide as what the header holds: its tabs, the unread chips, its buttons. */
+  private barWidth(): number {
+    // Each part's full width, even where the island is still too narrow to show it (scrollWidth).
+    let w = 36;
+    for (const part of Array.from(this.header.el.children) as HTMLElement[]) w += Math.max(part.offsetWidth, part.scrollWidth) + 10;
+    return clamp(w, 300, EXPANDED_W);
+  }
+
+  /** Room at the pill's right end for unread messages or the muted mic (syncCompactStatus). */
+  private statusWidth(): number {
+    return this.miniGrid.childElementCount > 0 ? 34 : 0;
+  }
+
+  /** The pill: wide enough for CLOVE's mark and both sides of the live activity. */
+  private pillWidth(): number {
+    if (this.liveWidth <= 0) return (State.settings.showClock ? COMPACT_CLOCK_W : COMPACT_W) + this.statusWidth();
+    // 38 for the mark, 26 between the two sides, 14 at the right end.
+    // The width he picked in Settings is how wide the pill may grow.
+    return clamp(38 + this.liveWidth + 26 + 14 + this.statusWidth(), COMPACT_W, compactWidth() || COMPACT_MAX_W);
   }
 
   private animateGeometry(shrinking: boolean) {
     const { w, h, r } = this.targetSize();
+    this.aimed = { w, h };
     if (shrinking) {
       this.width.curveTowards(w);
       this.height.curveTowards(h);
@@ -757,18 +967,22 @@ export class Island {
     const r = this.radius.value;
     this.islandEl.style.width = `${w}px`;
     this.islandEl.style.height = `${hh}px`;
-    this.islandEl.style.borderRadius = `0 0 ${r}px ${r}px`;
+    this.islandEl.style.borderRadius = `${Math.min(r, hh / 2)}px`;
     this.islandEl.style.transform = `translateX(-50%)`;
+    // Retracted, the pill slides up into the edge it floats under.
+    this.islandEl.style.top = `${hh < 1 ? 0 : TOP_GAP}px`;
+    this.islandEl.classList.toggle("gone", hh < 1);
+    this.live.el.style.right = `${12 + this.statusWidth()}px`;
+    this.live.bubble.style.left = `${w + BUBBLE_GAP}px`;
     // These follow Clove Notch as it resizes, so they belong here rather than in
     // the state-driven DOM sync.
-    this.miniGrid.style.left = `${w - 40 - 14.5}px`;
+    this.miniGrid.style.left = `${w - 29 - 12}px`;
     this.miniGrid.style.top = `${hh / 2 - 14.5}px`;
     this.clockEl.style.height = `${hh}px`;
     this.greetingCanvas.style.left = `${(w - EXPANDED_W) / 2}px`;
     this.uploadCanvas.el.style.left = `${(w - EXPANDED_W) / 2}px`;
 
-    const viewportW = window.innerWidth > 0 ? window.innerWidth : PANEL_W;
-    const rect = { x: (viewportW - w) / 2, y: 0, w, h: hh };
+    const rect = this.hitRect();
     const p = this.pushedRect;
     if (Math.abs(p.x - rect.x) > 0.5 || Math.abs(p.w - rect.w) > 0.5 || Math.abs(p.h - rect.h) > 0.5) {
       this.pushedRect = rect;
@@ -781,7 +995,22 @@ export class Island {
     const w = this.width.value;
     const hh = this.height.value;
     const viewportW = window.innerWidth > 0 ? window.innerWidth : PANEL_W;
-    return { x: (viewportW - w) / 2, y: 0, w, h: hh };
+    return { x: (viewportW - w) / 2, y: hh < 1 ? 0 : TOP_GAP, w, h: hh };
+  }
+
+  /**
+   * What takes the mouse: the island, the gap above it (the pointer thrown at
+   * the top edge still lands on it) and the bubble beside it.
+   */
+  /** The circle is there beside the pill and beside the bar the pill opens into, not beside a page. */
+  private bubbleShown(): boolean {
+    return State.mode === "compact" || (State.mode === "expanded" && State.view === "bar");
+  }
+
+  private hitRect(): { x: number; y: number; w: number; h: number } {
+    const r = this.islandRect();
+    const bubble = this.bubbleShown() ? BUBBLE_GAP + BUBBLE : 0;
+    return { x: r.x, y: 0, w: r.w + bubble, h: r.h + r.y };
   }
 
   // ── Window collapse (hidden → tiny wake strip, zero polling) ────────────────
@@ -819,8 +1048,16 @@ export class Island {
     this.islandEl.addEventListener("mousedown", (e) => {
       Sound.resume();
       State.lastActivity = performance.now();
+      // A click on the bar itself, not on one of its buttons, opens what the pill would have.
+      const onBar = State.mode === "expanded" && State.view === "bar";
       // A click makes a hover-opened island an ordinary open one.
       this.fsm.userInteracted();
+      if (onBar && e.button === 0 && !(e.target as HTMLElement).closest("button")) {
+        this.setView(this.openingView());
+        return;
+      }
+      // And a banner someone reaches for stays, with its dock.
+      this.endBanner(false);
       // A press on CLOVE may become a drag out to the desktop.
       if (e.button === 0 && this.isBotHit(e.clientX, e.clientY)) {
         this.botPress = { x: e.clientX, y: e.clientY };
@@ -928,8 +1165,9 @@ export class Island {
       y = -10_000;
     }
     State.mouse = { x, y };
-    const rect = this.islandRect();
-    State.mouseInIsland = { x: x - rect.x, y: y - rect.y };
+    const island = this.islandRect();
+    State.mouseInIsland = { x: x - island.x, y: y - island.y };
+    const rect = this.hitRect();
 
     // Windows sends no cursor position with an OLE drag, so the drop sequence is
     // fed from the Win32 cursor poll instead — it runs throughout the drag.
@@ -948,10 +1186,21 @@ export class Island {
     this.wasInIsland = inIsland;
     if (inIsland && !wasIn) {
       if (this.fsm.state === "clove-notch") this.greeting.hover();
-      this.fsm.mouseEntered();
+      // A pointer only passing under the top edge opens nothing: it has to rest a moment.
+      if (this.hoverTimer != null) window.clearTimeout(this.hoverTimer);
+      this.hoverTimer = window.setTimeout(() => {
+        this.hoverTimer = null;
+        if (this.wasInIsland) this.fsm.mouseEntered();
+      }, State.mode === "compact" ? 140 : 0);
     }
     if (!inIsland && wasIn) {
-      this.fsm.mouseLeft();
+      if (this.hoverTimer != null) {
+        // It left before it had rested: as if it had never come.
+        window.clearTimeout(this.hoverTimer);
+        this.hoverTimer = null;
+      } else {
+        this.fsm.mouseLeft();
+      }
     }
 
     // Bot hover → love
@@ -978,7 +1227,7 @@ export class Island {
 
   private isBotHit(x: number, y: number): boolean {
     // Out on the desktop, Clove Notch's CLOVE is invisible: nothing to hit.
-    if (State.mochiOnDesktop) return false;
+    if (State.mochiOnDesktop || State.mode === "expanded") return false;
     const rect = this.islandRect();
     const cx = rect.x + this.botCx.value;
     const cy = rect.y + this.botCy.value;
@@ -1114,7 +1363,9 @@ export class Island {
 
   private updateBotTargets() {
     const p = botPosition(State.mode, State.view, this.height.value, State.uploadProgress);
-    this.botCx.target = p.cx;
+    // Alone in the pill, the mark sits in its middle.
+    const alone = State.mode === "compact" && this.liveWidth <= 0 && !State.settings.showClock;
+    this.botCx.target = alone ? this.aimed.w / 2 : p.cx;
     this.botCy.target = p.cy;
     this.botSize.target = p.diameter / 0.6;
 
@@ -1122,22 +1373,11 @@ export class Island {
     // The drop canvas draws its own CLOVE; two of them would overlap. Out on the
     // desktop, he isn't here at all.
     const away = State.mochiOnDesktop;
-    const visible = p.opacity > 0 && !greetingActive && !this.uploadActive && !away;
+    // Open, the island is its content: CLOVE's mark lives in the pill only.
+    const visible = p.opacity > 0 && State.mode !== "expanded" && !greetingActive && !this.uploadActive && !away;
     this.botCanvas.style.opacity = visible ? "1" : "0";
 
-    if (State.mode === "expanded" && State.view !== "uploading" && !greetingActive && !this.uploadActive && !away) {
-      const d = p.diameter;
-      const color = botGlowColor(State.effectiveState);
-      this.botGlow.style.display = "block";
-      this.botGlow.style.width = `${d * 2.2}px`;
-      this.botGlow.style.height = `${d * 2.2}px`;
-      this.botGlow.style.left = `${this.botCx.value - d * 1.1}px`;
-      this.botGlow.style.top = `${this.botCy.value - d * 1.1}px`;
-      this.botGlow.style.background = `radial-gradient(circle, ${color} 0%, transparent 62%)`;
-      this.botGlow.style.opacity = String(botGlowOpacity(State.effectiveState));
-    } else {
-      this.botGlow.style.display = "none";
-    }
+    this.botGlow.style.display = "none";
   }
 
   private drawBot(dt: number) {
@@ -1260,7 +1500,14 @@ export class Island {
     // A wardrobe try-on never outlives the wardrobe.
     if (State.wardrobePreview && !(expanded && State.view === "wardrobe")) State.wardrobePreview = null;
 
+    this.islandEl.classList.toggle("expanded", expanded);
+    this.islandEl.dataset.view = expanded ? State.view : State.mode;
+    const glow = this.glowColor();
+    if (this.islandEl.style.getPropertyValue("--glow") !== glow) this.islandEl.style.setProperty("--glow", glow);
     this.header.sync();
+    // The header is on every page; only a banner (a card that came up by itself) goes without it.
+    this.header.el.style.display = State.view === "live" && this.liveView.banner ? "none" : "";
+    if (!(expanded && State.view === "live")) this.liveView.resetClicks();
     for (const [name, view] of this.views) {
       const on = name === State.view;
       view.el.classList.toggle("on", on);
@@ -1280,7 +1527,26 @@ export class Island {
       }
     }
 
+    // The pill's live content, measured so the pill fits it; the card resizes with what it shows.
+    const compact = State.mode === "compact";
+    this.live.el.classList.toggle("on", compact);
+    this.live.bubble.classList.toggle("shown", this.bubbleShown());
+    this.live.setBubble(this.unread());
+    const liveWidth = this.live.sync(Date.now());
+    if (Math.abs(liveWidth - this.liveWidth) > 0.5) {
+      this.liveWidth = liveWidth;
+      if (compact) this.animateGeometry(false);
+    }
+    // An open page follows what it shows: a card that changed, an unread chip that widened the header.
+    if (expanded) {
+      const want = this.targetSize();
+      if (Math.abs(want.w - this.aimed.w) > 0.5 || Math.abs(want.h - this.aimed.h) > 0.5) {
+        this.animateGeometry(want.w < this.aimed.w && want.h <= this.aimed.h);
+      }
+    }
+
     // Compact mini grid
+    // The right end of the pill: unread messages, or the muted mic.
     const showGrid = State.mode === "compact";
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
     if (showGrid) this.syncCompactStatus();
@@ -1294,19 +1560,9 @@ export class Island {
   /** The clock sits in the middle of the compact island, where the notch is on a Mac. CLOVE fork: while something
    *  runs (a timer, a recording, music…), its live activity takes the clock's place, like a Dynamic Island. */
   private updateClock() {
-    const live = State.mode === "compact" ? Tools.live() : null;
-    const on = State.mode === "compact" && (State.settings.showClock || live != null);
+    const on = State.mode === "compact" && State.settings.showClock && !this.live.active;
     this.clockEl.style.opacity = on ? "1" : "0";
     if (!on) return;
-    if (live) {
-      this.showLive(live);
-      return;
-    }
-    if (this.clockEl.dataset.live) {
-      delete this.clockEl.dataset.live;
-      this.clockEl.className = "";
-      this.clockEl.replaceChildren();
-    }
     const now = new Date();
     const date = now.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
     const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -1315,88 +1571,29 @@ export class Island {
   }
 
   /**
-   * CLOVE fork: the compact notch's right side, in place of the four little mascots: the app with unread
-   * messages (its logo and how many), else CLOVE muted (a red mic), else CLOVE listening (three breathing bars).
+   * CLOVE fork: the pill's right end, in place of the four little mascots: a red mic while CLOVE is muted.
+   * Unread messages are in the circle beside the pill (unread, below).
    */
   private syncCompactStatus() {
-    const unread = Object.entries(State.cloveUnread).filter(([, n]) => n > 0);
-    const newest = [...State.cloveLog].reverse().find((x) => x.kind === "message" && (State.cloveUnread[x.app] ?? 0) > 0);
-    const app = newest?.app ?? unread[0]?.[0];
-    const total = unread.reduce((n, [, c]) => n + c, 0);
-    const key = app ? `unread~${app}~${total}` : State.cloveMuted === true ? "muted" : State.cloveMuted === false ? "listening" : "idle";
+    const key = State.cloveMuted === true ? "muted" : "idle";
     if (this.miniGrid.dataset.key === key) return;
     this.miniGrid.dataset.key = key;
-    this.miniGrid.className = `status status-${key.split("~")[0]}`;
+    this.miniGrid.className = `status status-${key}`;
     this.miniGrid.replaceChildren();
     pruneMiniBots();
-    if (app) {
-      const logo = APP_LOGOS[app];
-      this.miniGrid.append(logo ? svg(logo, 15) : h("b", { text: app.slice(0, 1) }),
-        h("span", { class: "status-count", text: total > 9 ? "9+" : String(total) }));
-    } else if (key === "muted") {
-      this.miniGrid.append(svg(ICONS.micOff, 15));
-    } else if (key === "listening") {
-      const bars = h("span", { class: "status-bars" });
-      for (let i = 0; i < 3; i++) bars.append(h("i"));
-      this.miniGrid.append(bars);
-    }
+    if (key === "muted") this.miniGrid.append(svg(ICONS.micOff, 15));
+    // The pill's two sides stop short of it, and the pill makes room.
+    this.live.el.style.right = `${12 + this.statusWidth()}px`;
+    if (State.mode === "compact") this.animateGeometry(false);
   }
 
-  /** CLOVE fork: the compact notch's live activity: a mark (pulsing dot, bars, hourglass) and its text. */
-  private showLive(live: NonNullable<LiveActivity>) {
-    const now = Date.now();
-    let mark: string;
-    let text: string;
-    switch (live.kind) {
-      case "ringing":
-        mark = live.label ? "ring-alarm" : "ring-timer";
-        text = live.label ? t("Alarm {0}", { 0: live.label }) : t("Timer done");
-        break;
-      case "recording":
-        mark = "rec";
-        text = clockText(now - live.since);
-        break;
-      case "timer":
-        mark = "timer";
-        text = clockText(Math.max(0, live.endAt - now));
-        break;
-      case "timerPaused":
-        mark = "paused";
-        text = clockText(live.left);
-        break;
-      case "stopwatch":
-        mark = "stopwatch";
-        text = clockText(live.ms);
-        break;
-      case "media":
-        mark = "music";
-        text = live.artist ? `${live.title} · ${live.artist}` : live.title;
-        break;
-    }
-    const el = this.clockEl;
-    if (el.dataset.live !== mark) {
-      el.dataset.live = mark;
-      el.className = `live live-${mark}`;
-      const ringing = mark.startsWith("ring");
-      const m = h("span", { class: "live-mark" });
-      if (mark === "music") for (let i = 0; i < 4; i++) m.append(h("i"));
-      if (ringing) m.append(svg(mark === "ring-alarm" ? ICONS.bell : ICONS.hourglass, 13, { stroke: 2 }));
-      const textEl = h("span", { class: "live-text" });
-      if (ringing) {
-        // A ringing timer or alarm stops right here, without opening Clove Notch.
-        const stop = h("button", { class: "live-stop", text: t("Stop") });
-        stop.addEventListener("click", (e) => {
-          e.stopPropagation();
-          Tools.stopRinging();
-        });
-        stop.addEventListener("pointerdown", (e) => e.stopPropagation());
-        el.replaceChildren(m, textEl, stop);
-      } else {
-        el.replaceChildren(m, textEl);
-      }
-    }
-    const span = el.querySelector(".live-text") as HTMLElement;
-    if (span.textContent !== text) span.textContent = text;
+  /** The app with unread messages (the newest first) and how many in all: the circle beside the pill shows it. */
+  private unread(): { logo?: string; letter: string; count: number } | null {
+    const unread = Object.entries(State.cloveUnread).filter(([, n]) => n > 0);
+    if (!unread.length) return null;
+    const newest = [...State.cloveLog].reverse().find((x) => x.kind === "message" && (State.cloveUnread[x.app] ?? 0) > 0);
+    const app = newest?.app ?? unread[0][0];
+    return { logo: APP_LOGOS[app], letter: app.slice(0, 1).toUpperCase(), count: unread.reduce((n, [, c]) => n + c, 0) };
   }
 
   /** Keep Clove Notch on screen: never let the compact island hide itself, and bring it back if it had. */
@@ -1411,8 +1608,8 @@ export class Island {
     Sound.setEnabled(State.settings.soundEnabled);
     Sound.setVolume(State.settings.soundVolume);
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
-    this.fsm.openOnHover = State.settings.openOnHover;
-    setCompactWidth(State.settings.compactWidth ?? COMPACT_W);
+    this.fsm.openOnHover = true;   // a resting pointer opens the bar (or, with the setting on, the page)
+    setCompactWidth(State.settings.compactWidth ?? 0);
     this.applyKeepVisible();
     State.notify();
     // ponytail: one timer for the life of the window; a minute is the clock's finest tick.

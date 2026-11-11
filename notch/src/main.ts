@@ -14,6 +14,9 @@ import { registerShortcutHandlers } from "./island/shortcuts";
 import { registerVoiceHandlers } from "./island/voice";
 import { applySpotify, registerSpotifyHandlers } from "./island/spotify";
 import { registerWhatsAppHandlers } from "./island/whatsapp";
+import { LiveCtl, registerLiveHandlers } from "./live/control";
+import "./live/live.css";
+import "./live/glass.css";
 import { SPOTIFY_ID } from "./core/spotify";
 import { Recap } from "./recap/recap";
 import { Updates } from "./island/update";
@@ -182,7 +185,11 @@ async function main() {
   // CLOVE fork: the Controls and Time pages. Once a second: the timer, the stopwatch and alarms run on, and
   // what they show is redrawn; the toggles and the music are asked of Rust while the Controls page is open,
   // and now and then otherwise (the compact notch shows what's playing, or a recording).
-  Tools.onRing = () => island.alert("controls");
+  // A timer or an alarm going off opens its own card, as any live activity does.
+  Tools.onRing = () => {
+    LiveCtl.mirrorTools();
+    island.liveBanner("tools:timer", 60_000);
+  };
   // LocalSend (core/localsend.ts): devices nearby, a transfer offered to him, progress either way.
   LocalSend.onRequest = () => island.alert("receive");
   await onEvent<LsDevice[]>("localsend-devices", (list) => LocalSend.setDevices(list));
@@ -201,7 +208,7 @@ async function main() {
   });
   window.setTimeout(() => void LocalSend.refresh(), 4000);
   // A click on Clove Notch while music plays opens the player.
-  State.openOn = () => (Tools.media?.playing ? "controls" : null);
+
   window.addEventListener("clove-fold", () => island.collapse());
   let toolTicks = 0;
   const toolsTick = () => {
@@ -226,6 +233,15 @@ async function main() {
   registerVoiceHandlers();
   registerSpotifyHandlers(island);
   registerWhatsAppHandlers(island);
+  // `npm run dev` in a browser: the activities can be tried with made-up data (dev/live-demo.ts).
+  if (import.meta.env.DEV) void import("../dev/live-demo").then((m) => m.installLiveDemo(island));
+  // CLOVE's voice follows the sound button from the start (a restarted CLOVE speaks again by default).
+  if (!State.settings.soundEnabled) void Bridge.cloveSpeech("off");
+  registerLiveHandlers({
+    banner: (id, ms) => island.liveBanner(id, ms),
+    show: (id) => island.openLive(id),
+    revealSilently: () => island.revealSilently(),
+  });
   // New versions: Rust offers the card, Clove Notch opens it when nothing else waits.
   await Updates.register(island);
   // Rust may have read Spotify before this page listened: ask once.

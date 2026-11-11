@@ -12,7 +12,7 @@ import { KNOWN_AGENTS } from "../island/agents";
 import { Ticker } from "./ticker";
 import { inboxSummary, State, type AgentTask } from "../core/state";
 import { washRGBA, type IslandViewName, type Wash } from "../core/layout";
-import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
+import { pruneMiniBots } from "../mochi/minibots";
 import { buildPrompt } from "./chat";
 import { buildChoose, buildUpload, buildUploading } from "./upload";
 import { renderIntegrationCard, type IntegrationCardHooks } from "./integrations";
@@ -35,6 +35,7 @@ import { WHATSAPP_ID } from "../core/whatsapp";
 import type { Outfit, OutfitSelection } from "../mochi/wardrobe";
 import { N_, language, t, tl, type Msg } from "../i18n/i18n";
 import type { ViewCommand } from "../island/shortcuts";
+import { icon as liveIcon } from "../live/icons";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -52,6 +53,8 @@ export interface ViewActions {
   tellClove(text: string): void;
   /** CLOVE fork: the header's mic button: CLOVE stops or starts listening. */
   toggleCloveMic(): void;
+  /** Takes a pill off the notch (a right click on it); the main one stays. */
+  removePill(id: string): void;
   /** CLOVE fork: what the bottom bar's buttons did, now in the header: dictate, note (record a call), hub. */
   flowAction(action: "dictate" | "note" | "hub"): void;
   /** CLOVE fork: the file chooser; what he picks is handled like a drop. */
@@ -125,6 +128,25 @@ function stack(padLeft: number, padRight: number, ...children: Node[]): HTMLElem
   return el;
 }
 
+/** Opens the chats of an app with unread messages (its web app, or WhatsApp's card) and marks them read. */
+export function openUnreadApp(app: string, actions: ViewActions) {
+  actions.blip();
+  State.cloveUnread = { ...State.cloveUnread, [app]: 0 };
+  if (app === "WhatsApp" && State.tasks.some((x) => x.id === WHATSAPP_ID)) {
+    actions.setView("overview");
+    actions.setFocus(WHATSAPP_ID);
+  } else {
+    const urls: Record<string, string> = {
+      WhatsApp: "https://web.whatsapp.com", Instagram: "https://www.instagram.com/direct/inbox/",
+      Telegram: "https://web.telegram.org", X: "https://x.com/messages", LinkedIn: "https://www.linkedin.com/messaging/",
+      Discord: "https://discord.com/channels/@me", Slack: "https://app.slack.com", Messenger: "https://www.messenger.com",
+      Gmail: "https://mail.google.com", Teams: "https://teams.microsoft.com",
+    };
+    if (urls[app]) actions.openUrl(urls[app]);
+  }
+  State.notify();
+}
+
 // ── Header ────────────────────────────────────────────────────────────────────
 
 export function buildHeader(actions: ViewActions): ViewHost {
@@ -134,14 +156,13 @@ export function buildHeader(actions: ViewActions): ViewHost {
   // CLOVE fork: the Controls and Time pages.
   const tabControls = h("button", { class: "tab", title: tl("Controls"), onclick: () => go("controls") }, svg(ICONS.sliders, 13, { stroke: 2 }));
   const tabTime = h("button", { class: "tab", title: tl("Time"), onclick: () => go("time") }, svg(ICONS.clockFace, 13, { stroke: 2 }));
+  // Live activities: music, timers, rides, scores (views/live.ts).
+  const tabLive = h("button", { class: "tab", title: tl("Live"), onclick: () => go("live") }, liveIcon("activity", 13));
 
   const gearBtn = h("button", { title: tl("Settings"), onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: tl("Mute"), onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
   // CLOVE fork: CLOVE's microphone (hidden while CLOVE isn't running).
   const micBtn = h("button", { class: "clove-mic", onclick: () => actions.toggleCloveMic() }, svg(ICONS.micOn, 14));
-  const dictateBtn = h("button", { title: tl("Dictate"), onclick: () => actions.flowAction("dictate") }, svg(ICONS.dictate, 14, { stroke: 2 }));
-  const recordBtn = h("button", { class: "clove-rec", title: tl("Record a call"), onclick: () => actions.flowAction("note") }, svg(ICONS.recordCall, 14, { stroke: 1.8 }));
-  const openBtn = h("button", { title: tl("Open CLOVE"), onclick: () => actions.flowAction("hub") }, svg(ICONS.cloveWindow, 14, { stroke: 1.8 }));
   // Plan usage pills (off by default): before the gear, Claude first, as on the Mac.
   const claudePill = buildPlanPill(false);
   const codexPill = buildPlanPill(true);
@@ -165,21 +186,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
     }
   }
   function openApp(app: string) {
-    actions.blip();
-    State.cloveUnread = { ...State.cloveUnread, [app]: 0 };
-    if (app === "WhatsApp" && State.tasks.some((x) => x.id === WHATSAPP_ID)) {
-      actions.setView("overview");
-      actions.setFocus(WHATSAPP_ID);
-    } else {
-      const urls: Record<string, string> = {
-        WhatsApp: "https://web.whatsapp.com", Instagram: "https://www.instagram.com/direct/inbox/",
-        Telegram: "https://web.telegram.org", X: "https://x.com/messages", LinkedIn: "https://www.linkedin.com/messaging/",
-        Discord: "https://discord.com/channels/@me", Slack: "https://app.slack.com", Messenger: "https://www.messenger.com",
-        Gmail: "https://mail.google.com", Teams: "https://teams.microsoft.com",
-      };
-      if (urls[app]) actions.openUrl(urls[app]);
-    }
-    State.notify();
+    openUnreadApp(app, actions);
   }
 
   function go(v: IslandViewName) {
@@ -187,12 +194,15 @@ export function buildHeader(actions: ViewActions): ViewHost {
     actions.setView(v);
   }
 
+  // A glass lozenge behind the open page's tab, sliding from one tab to the next.
+  const glide = h("span", { class: "tab-glide" });
+  const pageTabs = [tabHome, tabLive, tabControls, tabTime, tabChat, tabDrop];
   const el = h(
     "div",
     { id: "header" },
-    h("div", { class: "tabs" }, tabHome, tabControls, tabTime, tabChat, tabDrop),
+    h("div", { class: "tabs" }, glide, ...pageTabs),
     unreadChips,
-    h("div", { class: "header-actions" }, planPills, dictateBtn, recordBtn, openBtn, micBtn, soundBtn, gearBtn),
+    h("div", { class: "header-actions" }, planPills, micBtn, soundBtn, gearBtn),
   );
   const headerActions = el.lastElementChild as HTMLElement;
 
@@ -205,6 +215,21 @@ export function buildHeader(actions: ViewActions): ViewHost {
       tabDrop.classList.toggle("on", v === "upload");
       tabControls.classList.toggle("on", v === "controls");
       tabTime.classList.toggle("on", v === "time");
+      tabLive.classList.toggle("on", v === "live");
+      const onTab = pageTabs.find((b) => b.classList.contains("on"));
+      if (onTab) {
+        const to = `translateX(${onTab.offsetLeft}px)`;
+        // Appearing (from the bar, or a page without a tab), it is just there; between tabs it slides.
+        if (!glide.classList.contains("shown")) {
+          glide.style.transition = "none";
+          glide.style.transform = to;
+          void glide.offsetWidth;
+          glide.style.transition = "";
+        } else if (glide.style.transform !== to) {
+          glide.style.transform = to;
+        }
+      }
+      glide.classList.toggle("shown", onTab != null);
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
@@ -345,6 +370,8 @@ function buildOverview(actions: ViewActions): ViewHost {
     shelf.classList.toggle("open", open);
   }
   // A click on a shortcut, or on the grid around them, folds it back.
+  // Which widgets are here is chosen in Settings (Active pills): this opens it.
+  const editPills = h("button", { class: "pills-edit", title: tl("Settings"), onclick: (e: Event) => { e.stopPropagation(); actions.openSettingsWindow(); } }, svg(ICONS.ellipsis, 10));
   pills.addEventListener("click", () => setFolder(false));
   State.subscribe(() => {
     if (State.mode !== "expanded" || State.view !== "overview") setFolder(false);
@@ -568,6 +595,7 @@ function buildOverview(actions: ViewActions): ViewHost {
       if (pillKey !== pillIds) {
         pillIds = pillKey;
         clear(pills);
+        pills.append(editPills);
         spotifyPill = null;
         clear(folderDots);
         for (const t of others) {
@@ -616,15 +644,29 @@ export function hasSessionTicker(task: AgentTask): boolean {
 
 function buildPill(task: AgentTask, actions: ViewActions): HTMLElement {
   const label = task.id === "integration_claude" ? pillDefinition(task.id)!.name : task.name;
-  // CLOVE fork: the shortcut's own logo, in white, where it has one.
+  // CLOVE fork: the shortcut's own logo, in white, where it has one; else a dot in the pill's colour,
+  // lit while its session is at work.
   const logo = logoFor(task.id, task.name);
-  const canvas = logo ? h("span", { class: "pill-logo" }, svg(logo, 14)) : createMiniBot(task, 24);
+  const mark = logo ? h("span", { class: "pill-logo" }, svg(logo, 14)) : h("span", { class: `pill-dot ${task.state === "idle" || task.state === "sleeping" ? "" : "on"}` });
+  if (!logo) mark.style.background = task.color;
+  // A small widget: a click shows it on the left, the arrow (or a double click) launches what it stands
+  // for, and a right click takes it off the notch.
+  const launch = () => {
+    actions.setFocus(task.id);
+    actions.openTarget();
+  };
+  const go = h("button", { class: "pill-go", title: tl("Open"), onclick: (e: Event) => { e.stopPropagation(); launch(); } }, svg(ICONS.arrowUpRight, 8));
   const pill = h(
     "div",
-    { class: "pill", onclick: () => actions.setFocus(task.id) },
-    canvas,
+    { class: "pill", onclick: () => actions.setFocus(task.id), ondblclick: launch },
+    mark,
     h("span", { class: "lbl", text: label }),
+    go,
   );
+  pill.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    actions.removePill(task.id);
+  });
   pill.style.borderColor = `${task.color}24`;
   pill.addEventListener("mouseenter", () => {
     pill.style.background = `${task.color}2e`;
@@ -1064,9 +1106,9 @@ export function buildViews(
   map.set("wardrobe", buildWardrobe(actions));
   map.set("update", buildUpdate());
   map.set("whatsNew", buildWhatsNew());
-  map.set("controls", buildControls());
+  map.set("controls", buildControls(actions));
   map.set("receive", buildReceive(actions));
-  map.set("time", buildStandby(buildTime(), actions));
+  map.set("time", buildStandby(buildTime(actions), actions));
   // Not in the Windows v1: sending a file by email, window attach + web result.
   map.set("mail", buildPlaceholder(tl("Sending by email isn't in this version."), ""));
   map.set("searching", buildPlaceholder(tl("Claude is searching…"), ""));

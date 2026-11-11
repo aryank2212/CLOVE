@@ -1,0 +1,330 @@
+/* Liquid glass: how the whole notch looks and moves. Loaded after style.css and live/live.css, which it
+   overrides. One dark glass island with a lit rim; inside it, frosted panels over two soft lights in the open
+   page's colour (--glow, set by island.ts), which is what their blur has to work with: the compositor does not
+   blur the desktop behind the notch. Motion: strong ease-out curves, under 300 ms, transform and opacity (a
+   little blur to hide cross-fades); with prefers-reduced-motion only fades remain. */
+
+@property --glow {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #5e5ce6;
+}
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --glass: rgba(255, 255, 255, 0.07);
+  --glass-hover: rgba(255, 255, 255, 0.12);
+  --glass-strong: rgba(255, 255, 255, 0.16);
+  --glass-rim: rgba(255, 255, 255, 0.09);
+  --glass-shine: rgba(255, 255, 255, 0.13);
+  --glass-blur: blur(18px) saturate(170%);
+  --glass-edges: inset 0 1px 0 var(--glass-shine), inset 0 0 0 1px var(--glass-rim);
+}
+
+/* ── The island, the pill and the circle: dark glass with a lit rim ─────────────── */
+
+#island,
+.live-bubble {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0) 42%),
+    rgba(9, 9, 12, 0.95);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.1),
+    inset 0 -12px 22px -16px rgba(255, 255, 255, 0.07),
+    0 14px 34px -12px rgba(0, 0, 0, 0.65),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+#island {
+  transition: --glow 500ms ease;
+}
+
+#island.gone {
+  box-shadow: none;
+}
+
+/* The lights behind the glass: only while open, and drifting so slowly it reads as depth, not motion. */
+#island-ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+
+#island.expanded #island-ambient { opacity: 1; }
+#island[data-view="bar"] #island-ambient { opacity: 0.5; }
+
+#island-ambient i {
+  position: absolute;
+  width: 72%;
+  height: 170%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--glow) 38%, transparent), transparent);
+  animation: ambient-drift 18s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+
+#island-ambient i:first-child { left: -20%; top: -70%; }
+
+#island-ambient i:last-child {
+  right: -22%;
+  bottom: -90%;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--glow) 24%, rgba(94, 92, 230, 0.26)), transparent);
+  animation-duration: 23s;
+  animation-direction: alternate-reverse;
+}
+
+#island.expanded #island-ambient i { animation-play-state: running; }
+
+@keyframes ambient-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(9%, 7%, 0) scale(1.12); }
+}
+
+/* ── Frosted panels: everything pressable or typed into ─────────────────────────── */
+
+.tab-glide,
+.lv-tile-glyph,
+.lv-dock-chip,
+.lv-unread-chip,
+.unread-chip,
+.qt,
+.dv-pill,
+.ag-input,
+.ag-tab.on,
+.lv-input,
+.lv-chip,
+.lv-match,
+.lv-pill.ghost,
+.lv-btn.grey,
+.chat-bar,
+.chat-suggestion,
+.bubble,
+.pill,
+.nf-card,
+.nf-layer {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 0;
+  box-shadow: var(--glass-edges);
+}
+
+.pill { border: 0 !important; }
+
+/* The overview's folder of shortcuts: glass too. */
+.pill-folder {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 0;
+  box-shadow: var(--glass-edges);
+  transition: transform 180ms var(--ease-out), opacity 180ms ease, background-color 160ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pill-folder:hover { background: var(--glass-hover); }
+}
+
+.pill-folder:active { transform: scale(0.97); }
+.nf-layer { background: rgba(255, 255, 255, 0.045); }
+
+.ag-input:focus,
+.lv-input:focus {
+  background: var(--glass-hover);
+  box-shadow: inset 0 1px 0 var(--glass-shine), inset 0 0 0 1.5px rgba(255, 255, 255, 0.28);
+}
+
+/* What is chosen: a stronger glass. */
+.lv-dock-chip.on,
+.header-actions button.on {
+  background: var(--glass-strong);
+  box-shadow: inset 0 1px 0 var(--glass-shine), inset 0 0 0 1.5px currentColor;
+}
+
+.header-actions button.on { box-shadow: var(--glass-edges); color: #fff; }
+
+/* The header: the open page has the lozenge behind it, which slides from tab to tab. */
+.tabs { position: relative; }
+.tab { position: relative; z-index: 1; }
+.tab.on { background: transparent; color: #fff; }
+
+.tab-glide {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: 50%;
+  background: var(--glass-strong);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 280ms var(--ease-out), opacity 160ms ease;
+}
+
+.tab-glide.shown { opacity: 1; }
+
+/* ── Feedback ─────────────────────────────────────────────────────────────────── */
+
+:is(.lv-btn, .lv-pill, .lv-tile, .lv-dock-chip, .lv-unread-chip, .unread-chip, .qt, .tab, .header-actions button,
+  .pill, .send-btn, .mic-btn, .chat-suggestion, .ag-btn, .ag-tab, .pills-edit, .pill-go, .lv-match, .lv-chip) {
+  transition: transform 140ms var(--ease-out), background-color 160ms ease, box-shadow 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+:is(.lv-btn, .lv-pill, .lv-tile, .lv-dock-chip, .lv-unread-chip, .unread-chip, .qt, .tab, .header-actions button,
+  .pill, .send-btn, .mic-btn, .chat-suggestion, .ag-btn, .ag-tab, .pills-edit, .pill-go, .lv-match, .lv-chip, .live-bubble):active {
+  transform: scale(0.96);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :is(.lv-dock-chip, .lv-unread-chip, .unread-chip, .qt:not(.on), .lv-input, .lv-chip, .lv-match, .lv-pill.ghost, .lv-btn.grey,
+    .chat-suggestion, .pill):hover {
+    background: var(--glass-hover);
+  }
+
+  .tab:hover,
+  .header-actions button:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+  .tab.on:hover { background: transparent; }
+
+  /* A launcher tile lifts a little, and a sheen passes over its glass. */
+  .lv-tile:hover .lv-tile-glyph { background: var(--glass-hover); transform: translateY(-1px); }
+
+  .lv-tile:hover .lv-tile-glyph::after {
+    transform: translateX(130%);
+    transition: transform 700ms var(--ease-out);
+  }
+}
+
+.lv-tile-glyph {
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms var(--ease-out), background-color 160ms ease;
+}
+
+.lv-tile-glyph::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.22) 50%, transparent 70%);
+  transform: translateX(-130%);
+  pointer-events: none;
+}
+
+/* A change that didn't happen: the field shakes once and flashes red. */
+.ag-input.shake { animation: field-shake 380ms var(--ease-out); }
+
+@keyframes field-shake {
+  0% { box-shadow: inset 0 0 0 1.5px rgba(255, 69, 58, 0.85); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(1px); }
+  100% { transform: none; box-shadow: var(--glass-edges); }
+}
+
+/* ── Pages coming and going ───────────────────────────────────────────────────── */
+
+.view { transform: none; transition: opacity 120ms ease-out; }
+
+.view.on {
+  transform: none;
+  transition: none;
+  animation: view-in 240ms var(--ease-out) 40ms backwards;
+}
+
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(3px) scale(0.985); filter: blur(4px); }
+}
+
+.lv-card.enter { animation: lv-enter 280ms var(--ease-out) backwards; }
+
+@keyframes lv-enter {
+  from { opacity: 0; filter: blur(6px); transform: scale(0.96); }
+}
+
+.live-compact.swap .lc-lead,
+.live-compact.swap .lc-trail { animation-duration: 300ms; animation-timing-function: var(--ease-out); }
+
+/* What a page opens with comes in one after another (30 ms apart). */
+.view.on :is(.lv-tile, .lv-unread-chip, .qt:not(.on), .dv-pill, .lv-dock-chip) {
+  animation: glass-in 280ms var(--ease-out) backwards;
+}
+
+.view.on :is(.lv-tile, .lv-unread-chip, .qt, .dv-pill, .lv-dock-chip):nth-child(2) { animation-delay: 30ms; }
+.view.on :is(.lv-tile, .lv-unread-chip, .qt, .dv-pill, .lv-dock-chip):nth-child(3) { animation-delay: 60ms; }
+.view.on :is(.lv-tile, .lv-unread-chip, .qt, .dv-pill, .lv-dock-chip):nth-child(4) { animation-delay: 90ms; }
+.view.on :is(.lv-tile, .lv-dock-chip):nth-child(5) { animation-delay: 120ms; }
+.view.on :is(.lv-tile, .lv-dock-chip):nth-child(6) { animation-delay: 150ms; }
+.view.on :is(.lv-tile, .lv-dock-chip):nth-child(7) { animation-delay: 180ms; }
+.view.on :is(.lv-tile, .lv-dock-chip):nth-child(8) { animation-delay: 210ms; }
+
+@keyframes glass-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); filter: blur(3px); }
+}
+
+/* ── The launcher: its four columns, the unread row above and the dock below share one grid line ──── */
+
+.lv-tiles {
+  grid-template-columns: repeat(4, 64px);
+  justify-content: space-between;
+  margin: 0 -4px;
+  gap: 4px 0;
+}
+
+.lv-tile { padding: 4px 0; }
+.lv-unread { padding: 0 6px; }
+.lv-dock { padding: 0 16px; }
+
+.lv-dock-chip {
+  width: 28px;
+  height: 28px;
+}
+
+.lv-dock-chip.plain { color: rgba(235, 235, 245, 0.75) !important; }
+
+/* ── Controls: the batteries, a glass pill each ───────────────────────────────── */
+
+.dv {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.dv-pill {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px 0 4px;
+  border-radius: 999px;
+}
+
+.dv-ring { position: relative; width: 24px; height: 24px; flex: 0 0 auto; }
+.dv-ring .lv-ring { position: absolute; inset: 0; }
+.dv-glyph { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; }
+.dv-name { font: 500 11.5px/1 var(--font); color: rgba(235, 235, 245, 0.85); max-width: 96px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dv-pct { font: 650 11.5px/1 var(--font); font-variant-numeric: tabular-nums; color: #fff; }
+
+/* ── Less motion ──────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  #island-ambient i { animation: none; }
+  .view.on { animation: view-fade 160ms ease-out backwards; }
+  .view.on :is(.lv-tile, .lv-unread-chip, .qt, .dv-pill, .lv-dock-chip) { animation: none; }
+  .lv-card.enter { animation: view-fade 160ms ease-out backwards; }
+  .tab-glide { transition: opacity 160ms ease; }
+  .lv-tile-glyph::after { display: none; }
+  .ag-input.shake { animation: none; box-shadow: inset 0 0 0 1.5px rgba(255, 69, 58, 0.85); }
+  :is(.lv-btn, .lv-pill, .lv-tile, .lv-dock-chip, .qt, .tab, .pill):active { transform: none; }
+}
+
+@keyframes view-fade {
+  from { opacity: 0; }
+}

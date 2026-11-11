@@ -206,6 +206,14 @@ async fn handle(app: AppHandle, mut pipe: impl Relay) {
         return;
     }
 
+    // A live activity pushed by the CLOVE assistant or a script (`{"live": {…}}`):
+    // a timer, a route, the voice conversation. Not a hook event.
+    if let Some(live) = payload.get("live") {
+        let _ = app.emit_to(WINDOW_LABEL, "live-push", live.clone());
+        pipe.finish();
+        return;
+    }
+
     let event = payload
         .get("hook_event_name")
         .and_then(Value::as_str)

@@ -47,6 +47,50 @@ I'll take it / End call while CLOVE is on a call. The buttons tell CLOVE what to
 (`clove_tell`, over CLOVE's control socket). A pill goes a minute after its last message; a call's stays while the
 call lasts.
 
+## Live activities (this fork's own)
+
+Clove Notch floats under the top edge as a pill and shows what is going on, as the Dynamic Island does: the most
+important activity on both sides of the pill, and a card when it is opened (`src/core/live.ts`, `src/live/`,
+`src-tauri/src/live/`). The cards are in English only for now.
+
+- **One notch.** Every page has the same header (Home, Live, Controls, Time, Chat, Drop, the unread chips, CLOVE's
+  mic, sound, Settings), the live cards included. Resting the pointer on the pill opens just that header, a bar of
+  pages one click away; a click on the bar opens what a click on the pill would. A card that comes up by itself (a
+  payment, a score) is shown alone, without the header, and folds back.
+- **The circle beside the pill** carries the unread messages (the newest app's logo and a count) and opens the
+  launcher: Ask CLOVE, timer, stopwatch, voice memo, navigate, stocks, scores, status, with the unread apps above.
+- **A click on a card** keeps it open; a second click opens what it is about (the match, the quote, the order, the
+  player). The wheel goes through the activities; the × on a match takes it off for good.
+- **Controls** holds the to-dos and reminders (below) and the batteries of this computer and what is connected to
+  it; **Time**'s calendar shows a picked day: its events, reminders and to-dos, and a reminder can be added for it.
+
+### To-dos, reminders and the calendar
+
+They belong to the CLOVE assistant (`assistant/agenda.py`, kept in its memory database), so the notch and the voice
+change the same ones: "remind me tomorrow at 9 to call the bank", "move that reminder to 10", "add renew passport
+by friday to my list", "what's on my calendar this week". The notch asks CLOVE over its control socket (`agenda
+<json>`, `clove_agenda` in `src-tauri/src/clove_chat.rs`). Reminders are said and shown when due, also after a
+restart. The calendar is read from its secret iCal address (Google Calendar: Settings → the calendar → "Secret
+address in iCal format"), pasted under a picked day or given by voice; nothing is written to it.
+
+| Activity | Where it comes from |
+|---|---|
+| Now playing (Spotify, YouTube, YouTube Music, Apple Music, mpv, VLC…) | every MPRIS player on the session bus |
+| Microphone and camera dots, screen recording | PulseAudio/PipeWire streams, who holds `/dev/video*`, the recorder processes |
+| Battery, earphones, mouse, phone | `/sys`, BlueZ, UPower, KDE Connect |
+| Hotspot | NetworkManager (`nmcli`), clients from `iw` |
+| Rides, orders, payments, calls, phone navigation | desktop notifications, read as a bus monitor (a phone's arrive through KDE Connect) |
+| Fingerprint, password prompts, face unlock, unlock | fprintd, the journal (polkit, sudo, Howdy), the lock screen process |
+| Timers, stopwatch, voice memos (`~/Music/Voice Memos`) | the notch itself |
+| Stocks, scores, routes | CNBC's quote service, ESPN's scoreboard, Nominatim + OSRM (no keys) |
+| The spoken conversation with CLOVE | the assistant (`assistant/notch.py`) |
+
+Anything can be pushed from a script, one JSON line on `$XDG_RUNTIME_DIR/clove-notch.sock`:
+`{"live": {"op": "timer", "duration": "5m", "label": "Tea"}}`. The ops are in `applyPush` (`src/live/control.ts`):
+`timer`, `stopwatch`, `memo`, `navigate`, `stock`, `follow`, `voice`, `auth`, `payment`, `call`, `ride`, `delivery`,
+`notification`, `media`, `dismiss`, `show`. The assistant's `notch` tool uses the same ops, so they work by voice.
+`npm run dev` in a browser has them all with made-up data: `demo("ride")` in the console (`dev/live-demo.ts`).
+
 ## Build and install
 
 ```bash

@@ -157,32 +157,6 @@
       "de": "CLOVE passt auf.",
       "tr": "CLOVE göz kulak oluyor."
     },
-    "Timer done": {
-      "zh-Hans": "计时结束",
-      "hi": "टाइमर पूरा",
-      "es": "Temporizador terminado",
-      "ar": "انتهى المؤقت",
-      "fr": "Minuteur terminé",
-      "bn": "টাইমার শেষ",
-      "pt-BR": "Timer concluído",
-      "ru": "Таймер завершён",
-      "id": "Timer selesai",
-      "de": "Timer abgelaufen",
-      "tr": "Zamanlayıcı bitti"
-    },
-    "Alarm {0}": {
-      "zh-Hans": "闹钟 {0}",
-      "hi": "अलार्म {0}",
-      "es": "Alarma {0}",
-      "ar": "منبه {0}",
-      "fr": "Alarme {0}",
-      "bn": "অ্যালার্ম {0}",
-      "pt-BR": "Alarme {0}",
-      "ru": "Будильник {0}",
-      "id": "Alarm {0}",
-      "de": "Wecker {0}",
-      "tr": "Alarm {0}"
-    },
     "Play or pause": {
       "zh-Hans": "播放或暂停",
       "hi": "चलाएं या रोकें",
@@ -1391,19 +1365,6 @@
       "id": "Bicara",
       "de": "Reden",
       "tr": "Konuş"
-    },
-    "Dictate": {
-      "zh-Hans": "听写",
-      "hi": "बोलकर लिखें",
-      "es": "Dictar",
-      "ar": "إملاء",
-      "fr": "Dicter",
-      "bn": "বলে লিখুন",
-      "pt-BR": "Ditar",
-      "ru": "Диктовка",
-      "id": "Dikte",
-      "de": "Diktieren",
-      "tr": "Dikte et"
     },
     "Mute CLOVE": {
       "zh-Hans": "让 CLOVE 静音",

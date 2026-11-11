@@ -5,6 +5,9 @@
 //   Time:      [ today, big · the month                  ]  [ the world in dots, day and night · city clocks  ]
 
 import { State } from "../core/state";
+import { Agenda, buildAgendaPanel, buildDayPanel } from "../live/agenda";
+import { buildDeviceStrip } from "../live/view";
+import type { ViewActions } from "./views";
 import {
   Tools, cityTime, clockText, isDay, nearestCity, subsolarPoint, type ClockTab,
 } from "../core/tools";
@@ -27,7 +30,7 @@ function iconBtn(cls: string, title: string, icon: string, onClick: () => void, 
 
 // ── Controls ──────────────────────────────────────────────────────────────────
 
-export function buildControls(): ViewHost {
+export function buildControls(actions: ViewActions): ViewHost {
   // Music
   const art = h("div", { class: "mp-art" });
   const glow = h("div", { class: "mp-glow" });
@@ -143,8 +146,14 @@ export function buildControls(): ViewHost {
   });
   const clock = h("div", { class: "ck" }, seg, h("div", { class: "ck-mid" }, digits, caption), h("div", { class: "ck-btns" }, sideBtn, mainBtn));
 
-  const right = card(h("div", { class: "ctl-right" }, tileRow, clock));
-  const el = h("div", { class: "view overview tools-view" }, h("div", { class: "left" }, music), h("div", { class: "right" }, right));
+  // The player has its own live card and the timer its own in the launcher: here, what is to be done
+  // (to-dos and reminders, kept by CLOVE) and what the machine is doing.
+  void music;
+  void clock;
+  const agenda = buildAgendaPanel(actions);
+  const status = buildDeviceStrip();
+  const right = card(h("div", { class: "ctl-right" }, tileRow, status.el));
+  const el = h("div", { class: "view overview tools-view" }, h("div", { class: "left" }, card(agenda.el)), h("div", { class: "right" }, right));
 
   let artKey = "";
   let digitsKey = "";
@@ -272,6 +281,8 @@ export function buildControls(): ViewHost {
   return {
     el,
     sync() {
+      agenda.sync();
+      status.sync();
       if (State.view !== "controls") return;
       syncMusic();
       syncTiles();
@@ -293,7 +304,7 @@ function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-export function buildTime(): ViewHost {
+export function buildTime(actions: ViewActions): ViewHost {
   // ── The calendar: a click on a day shows it on the left; the wheel or the arrows change the month ──
   const bigDay = h("div", { class: "cal-day" });
   const bigWeekday = h("div", { class: "cal-weekday" });
@@ -388,7 +399,15 @@ export function buildTime(): ViewHost {
     mapKey = "";
   });
 
-  const el = h("div", { class: "view overview tools-view" }, h("div", { class: "left" }, calendar), h("div", { class: "right" }, world));
+  // A picked day shows what is on it (the calendar's events, reminders, to-dos) in place of the world.
+  const dayPanel = buildDayPanel(actions, () => {
+    picked = null;
+    calKey = "";
+    State.notify();
+  });
+  const rightSide = h("div", { class: "right" }, world, card(dayPanel.el));
+  const dayCard = rightSide.lastElementChild as HTMLElement;
+  const el = h("div", { class: "view overview tools-view" }, h("div", { class: "left" }, calendar), rightSide);
 
   let calKey = "";
   let mapKey = "";
@@ -396,7 +415,11 @@ export function buildTime(): ViewHost {
 
   function syncCalendar(now: Date) {
     const lang = document.documentElement.lang || undefined;
-    const key = `${now.toDateString()}~${shown.getTime()}~${picked?.getTime() ?? 0}~${lang}`;
+    Agenda.refresh(shown);
+    world.style.display = picked ? "none" : "";
+    dayCard.style.display = picked ? "" : "none";
+    dayPanel.sync(picked);
+    const key = `${now.toDateString()}~${shown.getTime()}~${picked?.getTime() ?? 0}~${lang}~${Agenda.version}`;
     const next = Tools.nextAlarm(now);
     nextAlarm.textContent = next ? `⏰ ${String(next.alarm.h).padStart(2, "0")}:${String(next.alarm.m).padStart(2, "0")}` : "";
     if (key === calKey) return;
@@ -421,6 +444,7 @@ export function buildTime(): ViewHost {
       grid.append(h("span", { class: "cal-dow", text: d.toLocaleDateString(lang, { weekday: "narrow" }) }));
     }
     const first = (shown.getDay() + 6) % 7;
+    const busy = Agenda.busyDays(shown);
     const days = new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate();
     for (let i = 0; i < first; i++) grid.append(h("span"));
     for (let d = 1; d <= days; d++) {
@@ -429,6 +453,7 @@ export function buildTime(): ViewHost {
       if (sameDay(date, now)) cls.push("today");
       if (picked && sameDay(date, picked)) cls.push("picked");
       if ((first + d - 1) % 7 >= 5) cls.push("weekend");
+      if (busy.has(d)) cls.push("busy");
       const cell = h("span", { class: cls.join(" "), text: String(d) });
       cell.dataset.day = String(d);
       grid.append(cell);
