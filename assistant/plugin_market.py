@@ -10,5 +10,6 @@ def list_plugins() -> str:
     return ", ".join(p.stem for p in _DIR.glob("*.py")) or "no plugins installed"
 
 def install(name: str, url: str) -> str:
-    _DIR.mkdir(parents=True, exist_ok=True)
-    return f"scaffold: would download {url} as {name}.py (not implemented)"
+    # Downloading Python from a URL and running it would hand the computer to whoever controls that URL.
+    return (f"Installing plugins from the internet is not supported, so nothing was downloaded from {url}. "
+            f"To add one, review the file yourself and put it in {_DIR} as {name or 'name'}.py.")
