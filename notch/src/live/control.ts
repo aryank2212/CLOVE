@@ -633,8 +633,9 @@ function applyVoice(v: Partial<VoiceData> & { phase?: string }) {
     reply: v.reply ?? (phase === "listening" ? "" : old?.reply ?? ""),
     level: v.level ?? old?.level ?? 0,
   };
-  const fresh = Live.upsert("voice", "voice", data, t, 90_000);
-  if (fresh || (old && old.phase !== phase && phase === "listening")) host?.banner("voice", 12_000);
+  // Talking to CLOVE stays in the pill (its bars and "Listening", "Thinking", "Speaking"): opening the whole card on
+  // every command covered the screen each time. The card is a hover or a click away.
+  Live.upsert("voice", "voice", data, t, 90_000);
 }
 
 /** Wakes the CLOVE assistant so it listens now, as saying its name does. */
