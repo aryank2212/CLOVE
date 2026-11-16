@@ -163,6 +163,8 @@ WAKE_WORD = _env("WAKE_WORD", "on").lower() != "off"
 WAKE_NAMES = [n.strip().lower() for n in _env("WAKE_NAMES", "clove,rose").split(",") if n.strip()]
 WAKE_WINDOW_S = float(_env("WAKE_WINDOW_S", "40"))
 # Focus mode nudges you when one of these shows up in the focused window or Chrome tab
+# The search engine for "search the web" (tools.web_search): bing (default), google, duckduckgo or brave.
+SEARCH_ENGINE = _env("SEARCH_ENGINE", "bing").lower()
 FOCUS_DISTRACTIONS = [d.strip() for d in _env("FOCUS_DISTRACTIONS",
                       "youtube,instagram,reddit,twitter,x.com,facebook,netflix,hotstar,primevideo,9gag").split(",") if d.strip()]
 # Text or voice-note Clove from your phone via your Telegram bot (TELEGRAM_BOT_TOKEN/CHAT_ID). Off by default: a bot

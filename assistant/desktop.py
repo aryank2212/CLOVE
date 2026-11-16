@@ -11,6 +11,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import config
+
 # Never run these, even with approval.
 CATASTROPHIC = re.compile(r"rm\s+-[a-z]*r[a-z]*f?[a-z]*\s+(/|~|\$HOME)/?(\s|$)|mkfs|dd\s+.*of=/dev/(sd|nvme|vd)|:\(\)\s*\{|"
                           r">\s*/dev/(sd|nvme)", re.I)
@@ -429,8 +431,18 @@ def open_url(url: str, new_window: bool = False) -> str:
     return f"opened {url}"
 
 
+SEARCH_URLS = {"bing": "https://www.bing.com/search?q=", "google": "https://www.google.com/search?q=",
+               "duckduckgo": "https://duckduckgo.com/?q=", "brave": "https://search.brave.com/search?q="}
+
+
+def search_url(query: str, engine: str | None = None) -> str:
+    """The results page for `query` on his search engine (SEARCH_ENGINE in .env; Bing unless he chose another)."""
+    base = SEARCH_URLS.get((engine or config.SEARCH_ENGINE or "bing").lower(), SEARCH_URLS["bing"])
+    return base + urllib.parse.quote_plus(query)
+
+
 def web_search(query: str) -> str:
-    url = "https://www.google.com/search?q=" + urllib.parse.quote_plus(query)
+    url = search_url(query)
     _chrome_open(url, "Default", new=True)          # a search always gets its own tab
     return f"opened {url}"
 

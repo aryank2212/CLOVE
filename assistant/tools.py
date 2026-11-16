@@ -54,7 +54,7 @@ DECLARATIONS = [
         ["query"]),
     _fn("find_bookmarks", "List bookmarks matching a query without opening them.", {"query": _s("STRING")}, ["query"]),
     _fn("open_url", "Open a website in Chrome.", {"url": _s("STRING"), "new_window": _s("BOOLEAN")}, ["url"]),
-    _fn("web_search", "Open a Google search in Chrome.", {"query": _s("STRING")}, ["query"]),
+    _fn("web_search", "Open a web search in Chrome (Bing, unless he chose another search engine).", {"query": _s("STRING")}, ["query"]),
     _fn("search_files", "Find files or folders in the home directory by words in their name (newest first).",
         {"query": _s("STRING"), "root": _s("STRING", "Folder to search, default ~")}, ["query"]),
     _fn("open_path", "Open a file or folder with its default app.", {"path": _s("STRING")}, ["path"]),
