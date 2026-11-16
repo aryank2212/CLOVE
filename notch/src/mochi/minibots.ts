@@ -74,6 +74,12 @@ export function syncMiniBotStates(tasks: AgentTask[]) {
   }
 }
 
+/** CLOVE fork: every small bot is only on its ambient loop (nothing hovered, nobody dancing). */
+export function miniBotsAmbientOnly(): boolean {
+  for (const mb of live.values()) if (!mb.engine.ambientOnly || mb.dancing?.()) return false;
+  return true;
+}
+
 export function tickMiniBots(dt: number) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   for (const mb of live.values()) {

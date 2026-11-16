@@ -377,9 +377,18 @@ fn open_file_in_vscode(path: String) -> bool {
     false
 }
 
+/// CLOVE fork: set by a real Quit (the tray's, the button in the window), not by an update restarting Clove Notch.
+/// Quit then ends the assistant too: it used to run on alone (the microphone, a core of the CPU) after he had quit.
+pub static QUIT_ALL: AtomicBool = AtomicBool::new(false);
+
+pub fn quit_everything(app: &AppHandle) {
+    QUIT_ALL.store(true, Ordering::Relaxed);
+    app.exit(0);
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle) {
-    app.exit(0);
+    quit_everything(&app);
 }
 
 /// Tray → Pause. Paused means paused: the pollers stop talking to the network,
@@ -885,6 +894,7 @@ pub fn run() {
             controls::media_state,
             controls::media_control,
             controls::open_in_chrome,
+            controls::focus_mode,
             streaks::streaks_fetch,
             localsend::localsend_devices,
             localsend::localsend_answer,
@@ -1080,6 +1090,10 @@ pub fn run() {
                 notes::shutdown(app);
                 // GOWA started by CLOVE stops with it; the conversations were only in memory.
                 whatsapp::shutdown();
+                // And the assistant, when this was a Quit.
+                if QUIT_ALL.load(Ordering::Relaxed) {
+                    clove_chat::stop_assistant();
+                }
             }
         });
 }

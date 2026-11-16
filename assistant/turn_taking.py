@@ -130,6 +130,30 @@ CHECK_AFTER_S = 0.15       # how much silence before the ending is read (it take
 CHECK_PENDING_S = 1.5      # while that read is still running: give it this long, then go by timing alone
 
 
+_vad = {"ok": None}
+
+
+def has_speech(pcm: bytes, min_s: float = 0.15) -> bool:
+    """Is there speech in this audio (16 kHz mono int16)? A small voice detector (Silero, bundled with faster-whisper),
+    about 3 ms for a few seconds of audio. Noise, a fan, keyboard clicks and a hissing microphone say no, so they
+    never reach the recogniser (which costs a whole CPU core while it runs) or Gemini. If it can't run, everything
+    counts as speech (the old behaviour)."""
+    if _vad["ok"] is False:
+        return True
+    try:
+        from faster_whisper.vad import VadOptions, get_speech_timestamps
+        x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768
+        stamps = get_speech_timestamps(x, VadOptions(threshold=0.5, min_speech_duration_ms=int(min_s * 1000),
+                                                     min_silence_duration_ms=100))
+        _vad["ok"] = True
+        return sum(s["end"] - s["start"] for s in stamps) >= min_s * RATE
+    except Exception as e:
+        if _vad["ok"] is None:
+            log.warning("voice detector unavailable (%s); every sound counts as speech", e)
+        _vad["ok"] = False
+        return True
+
+
 class Recogniser:
     """Small Whisper on the CPU, loaded in the background; returns None until ready (then timing alone decides)."""
 
@@ -152,6 +176,7 @@ class Recogniser:
             t0 = time.monotonic()
             self.model = WhisperModel(self.name, device="cpu", compute_type="int8", cpu_threads=4)
             self.text(np.zeros(RATE, dtype=np.int16).tobytes())       # the first run is slow: do it now, not mid-conversation
+            has_speech(np.zeros(RATE, dtype=np.int16).tobytes())      # ...and the voice detector's first load
             log.info("turn-taking recogniser (%s) ready in %.1fs", self.name, time.monotonic() - t0)
         except Exception as e:
             log.warning("turn-taking recogniser unavailable (%s); using timing only", e)
@@ -182,6 +207,8 @@ class TurnTaker:
         self.rec = recogniser
         self.floor = 60.0                        # noise floor of the line (RMS)
         self.in_turn = False
+        self.confirmed = True
+        self._vad_at = 0.0
         self.voice_streak = 0
         self.window: deque[bool] = deque(maxlen=25)            # the last second, frame by frame: speech or not
         self.ducked = False
@@ -200,9 +227,38 @@ class TurnTaker:
     def threshold(self) -> float:
         return max(220.0, self.floor * 3.2)
 
+    def _confirm(self, now: float, silence: float) -> bool:
+        """Is the sound that opened this turn speech? Decided once, when there is enough of it to judge (0.3 s) or the
+        sound has stopped. Speech: the turn begins (True). Noise: the turn is dropped (in_turn False)."""
+        if self.confirmed:
+            return True
+        age = now - self.turn_started
+        if age < 0.3 and silence < 0.12:
+            return False                                          # not enough yet
+        if now < self._vad_at:
+            return False
+        self._vad_at = now + 0.12                                 # looked again at most every 0.12 s
+        if has_speech(bytes(self.utterance[-RATE * 2 * 3:])):
+            self.confirmed = True
+            return True
+        # No speech (yet). While the sound goes on, a voice may still begin (a slow, breathy start; a bump and then
+        # words): wait. Dropped once the sound has stopped, or has gone on for 1.5 s without a word (a fan, a hum).
+        if silence >= 0.12 or age >= 1.5:
+            self.in_turn = False
+            self.voice_streak = 0
+            self.window.clear()
+            tail = bytes(self.utterance[-1280 * 10:])             # keep the last ~0.4 s as the lead-in of the next
+            self.preroll.clear()                                  # turn: a word that starts right now is not clipped
+            for i in range(0, len(tail) - 1279, 1280):
+                self.preroll.append(tail[i:i + 1280])
+        return False
+
     def _decide(self, pcm: bytes, started: float, voice_mark: float):
         try:
-            text = self.rec.text(pcm, self.language) if self.rec else None
+            if not has_speech(pcm):
+                text = ""                                         # nothing to read: no recogniser run
+            else:
+                text = self.rec.text(pcm, self.language) if self.rec else None
         except Exception as e:
             log.debug("recogniser failed: %s", e)
             text = None
@@ -214,16 +270,20 @@ class TurnTaker:
 
     def _check_duck(self, pcm: bytes):
         try:
-            text = self.rec.text(pcm, self.language) if self.rec else ""
+            text = self.rec.text(pcm, self.language) if (self.rec and has_speech(pcm)) else ""
         except Exception:
             text = ""
         self.duck_check = "speech" if is_interruption(text or "") else "backchannel"
         log.info("over Clove they said %r -> %s", text, self.duck_check)
 
-    def _open(self, now: float):
+    def _open(self, now: float, confirmed: bool = False):
         self.in_turn, self.turn_started, self.last_voice = True, now, now
         self.verdict, self.verdict_text = None, ""
         self.utterance = bytearray(b"".join(self.preroll))
+        # Loud sound is not yet speech: the turn is held back (nothing sent, nothing read) until the voice detector
+        # hears speech in it, or dropped if it doesn't.
+        self.confirmed = confirmed
+        self._vad_at = 0.0
 
     def on_frame(self, pcm: bytes, clove_speaking: bool, now: float | None = None) -> list[str]:
         now = time.monotonic() if now is None else now
@@ -256,7 +316,7 @@ class TurnTaker:
                 no_rec = (self.rec is None or self.rec.model is None) and sum(w) >= 19   # no recogniser: duration decides
                 if self.duck_check == "speech" or long_talk or no_rec:
                     self.ducked = False                             # a real interruption: drop his sentence and listen
-                    self._open(now)
+                    self._open(now, confirmed=True)                 # already read as words
                     self.utterance = bytearray(self.duck_audio)     # everything they said since he paused, not just the last 0.4 s
                     return ev + ["barge", "start", "audio"]
                 if sum(w) >= 19 and self.duck_check is None:        # ~0.8 s of sound: words or just an "mm-hm"? check
@@ -266,15 +326,24 @@ class TurnTaker:
                     self.ducked = False
                     return ev + ["unduck"]
                 return ev
-            if sum(w[-4:]) >= 3:                                     # he is silent: ~0.12 s of speech starts their turn
+            if sum(w[-4:]) >= 3:                                     # he is silent: ~0.12 s of sound may start their turn
                 self._open(now)
-                ev += ["start", "audio"]
+                if self._confirm(now, silence=0.0):
+                    ev += ["start", "audio"]
             return ev
         # in their turn
-        ev.append("audio")
         self.utterance.extend(pcm)
         if len(self.utterance) > RATE * 2 * 12:
             del self.utterance[: len(self.utterance) - RATE * 2 * 12]
+        if not self.confirmed:
+            if self._confirm(now, silence=0.0 if voice else now - self.last_voice):
+                ev += ["start", "audio"]
+            elif not self.in_turn:
+                return ev                                           # it was only noise: nothing happened
+            if voice:
+                self.last_voice = now
+            return ev
+        ev.append("audio")
         if voice:
             if now - self.last_voice > 0.3:                 # they started again after a pause: reconsider
                 with self._lock:

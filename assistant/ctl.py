@@ -1,5 +1,5 @@
 """A local control socket (~/.local/state/clove/ctl.sock, readable only by you) so hotkeys and scripts can drive
-the running Clove: `scripts/clove-ctl dictate`, `wake`, `sleep`, `say <text>`, `focus <minutes>`, `status`.
+the running Clove: `scripts/clove-ctl dictate`, `wake`, `sleep`, `say <text>`, `focus <minutes>`, `status`, `quit`.
 One command per connection; the reply is one line."""
 import asyncio
 import logging
@@ -59,6 +59,10 @@ async def command(a, line: str) -> str:
         a.user_said(arg, typed=True)
         await a.send_text(arg)
         return "ok"
+    if cmd == "quit":                            # Clove Notch's Quit: the assistant ends with it (and its helpers)
+        log.info("quit asked over the control socket")
+        a.loop.call_later(0.2, a.quit)           # after this answer has gone out
+        return "bye"
     if cmd == "mode":                            # Clove Notch's Work / DND / Sleep slider: mode work|dnd|sleep|off|status
         arg = arg.strip().lower()
         return a.mode if arg in ("", "status") else a.set_mode(arg)
@@ -86,7 +90,7 @@ async def command(a, line: str) -> str:
         return (f"brain={a.active} state={a.compute_state()} jobs={len(a.jobs.running())} "
                 f"dictating={a.dictation.on} focus={a.focus.remaining()}")
     return ("commands: dictate, wake, sleep, mute [on|off|toggle], speech [on|off|toggle], say <text>, ask <text>, agent_ask <question>, context, "
-            "focus <minutes>, status")
+            "focus <minutes>, status, mode <work|dnd|sleep|off>, quit")
 
 
 _chat = {"brain": None, "lock": None}

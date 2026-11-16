@@ -13,6 +13,8 @@ import brain_gemini  # noqa: E402
 import config  # noqa: E402
 import turn_taking as T  # noqa: E402
 
+T.has_speech = lambda pcm, min_s=0.15: True       # these frames are tones, not a voice: the speech check has its own test
+
 fails = 0
 
 

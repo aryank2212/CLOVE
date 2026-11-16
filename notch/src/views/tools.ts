@@ -29,6 +29,27 @@ function iconBtn(cls: string, title: string, icon: string, onClick: () => void, 
   }, svg(icon, size, stroke ? { stroke } : {})) as HTMLButtonElement;
 }
 
+/** A cover as a 12-pixel picture: stretched over the card it is a soft wash of its colours, which a blur filter would
+ *  paint at a great cost (the page is drawn in software). Cached by cover. */
+const washes = new Map<string, string>();
+function wash(src: string, done: (tiny: string) => void) {
+  const known = washes.get(src);
+  if (known) return done(known);
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const c = document.createElement("canvas");
+      c.width = c.height = 12;
+      c.getContext("2d")?.drawImage(img, 0, 0, 12, 12);
+      const tiny = c.toDataURL("image/png");
+      if (washes.size > 6) washes.clear();
+      washes.set(src, tiny);
+      done(tiny);
+    } catch { /* the cover can't be read: no glow */ }
+  };
+  img.src = src;
+}
+
 // ── Controls ──────────────────────────────────────────────────────────────────
 
 export function buildControls(actions: ViewActions): ViewHost {
@@ -250,7 +271,7 @@ export function buildControls(actions: ViewActions): ViewHost {
       clear(art);
       if (m.art) {
         art.append(h("img", { src: m.art, alt: "" }));
-        glow.style.backgroundImage = `url("${m.art}")`;
+        wash(m.art, (tiny) => { if (artKey === m.art) glow.style.backgroundImage = `url("${tiny}")`; });
       } else {
         art.append(svg(ICONS.musicNote, 22));
         glow.style.backgroundImage = "";

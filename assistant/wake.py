@@ -130,6 +130,9 @@ class WakeGate:
 
     def _check(self, pcm: bytes):
         try:
+            from turn_taking import has_speech
+            if not has_speech(pcm):                   # a noise, not a voice: don't spend the recogniser on it
+                return
             model = getattr(self.recogniser, "model", None)
             if model is None:                         # recogniser still loading: don't make him wait for it
                 self._woken(pcm, "(recogniser loading)")

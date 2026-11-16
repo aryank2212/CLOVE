@@ -136,6 +136,46 @@ pub async fn clove_mute(action: String) -> Result<bool, String> {
     tokio::time::timeout(Duration::from_secs(5), talk).await.map_err(|_| "CLOVE didn't answer.".to_string())?
 }
 
+/// CLOVE fork: tells CLOVE the focus slider's mode (work | dnd | sleep | off). Returns its mode now, or None
+/// when CLOVE isn't running.
+pub async fn tell_mode(mode: &str) -> Option<String> {
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.ok()?;
+        stream.write_all(format!("mode {mode}\n").as_bytes()).await.ok()?;
+        let mut reader = BufReader::new(stream);
+        let mut out = String::new();
+        reader.read_line(&mut out).await.ok()?;
+        Some(out.trim().to_string())
+    };
+    tokio::time::timeout(Duration::from_secs(5), talk).await.ok().flatten()
+}
+
+/// Sends "quit" to the assistant's control socket and waits for its "bye". True if it took the request.
+fn ask_quit() -> bool {
+    use std::io::{Read, Write};
+    let Ok(mut s) = std::os::unix::net::UnixStream::connect(socket()) else { return false };
+    let _ = s.set_write_timeout(Some(Duration::from_secs(1)));
+    let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
+    if s.write_all(b"quit\n").is_err() {
+        return false;
+    }
+    let mut buf = [0u8; 16];
+    matches!(s.read(&mut buf), Ok(n) if n > 0 && buf.starts_with(b"bye"))
+}
+
+/// CLOVE fork: Quit means everything. Asks the assistant to end (its control socket), waits a moment for it to
+/// start, and tells systemd not to bring the login service back. Called as Clove Notch exits, so it is blocking
+/// and short.
+pub fn stop_assistant() {
+    ask_quit();
+    let _ = std::process::Command::new("systemctl")
+        .args(["--user", "stop", "--no-block", "clove.service"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
 /// A new WhatsApp message from the gateway, for CLOVE to announce, show and answer like any other message
 /// (its notifications.py). Returns whether CLOVE took it: if not (CLOVE isn't running), the notch shows its
 /// own pill as before.
@@ -175,4 +215,31 @@ pub async fn clove_ctl(command: String) -> Result<String, String> {
         Ok(out.trim().to_string())
     };
     tokio::time::timeout(Duration::from_secs(6), talk).await.map_err(|_| "CLOVE took too long to answer.".to_string())?
+}
+
+#[cfg(test)]
+mod quit_tests {
+    use super::*;
+
+    #[test]
+    fn quit_is_sent_to_the_control_socket_and_answered() {
+        let dir = std::env::temp_dir().join(format!("clove-quit-{}", std::process::id()));
+        let sock_dir = dir.join("clove");
+        std::fs::create_dir_all(&sock_dir).unwrap();
+        std::env::set_var("XDG_STATE_HOME", &dir);
+        let listener = std::os::unix::net::UnixListener::bind(socket()).unwrap();
+        let server = std::thread::spawn(move || {
+            use std::io::{BufRead, Write};
+            let (mut c, _) = listener.accept().unwrap();
+            let mut line = String::new();
+            std::io::BufReader::new(c.try_clone().unwrap()).read_line(&mut line).unwrap();
+            c.write_all(b"bye\n").unwrap();
+            line
+        });
+        assert!(ask_quit());
+        assert_eq!(server.join().unwrap(), "quit\n");
+        // Nobody listening any more: not an error, just false.
+        assert!(!ask_quit());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

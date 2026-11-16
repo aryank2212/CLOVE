@@ -20,7 +20,7 @@ import { ICONS } from "../views/icons";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
-import { pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
+import { miniBotsAmbientOnly, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
 import { SeasonCache, parseOutfit } from "../mochi/wardrobe";
 import { UploadCanvas } from "../upload/canvas";
 import { USC, UploadSeq } from "../upload/sequence";
@@ -1288,7 +1288,52 @@ export class Island {
 
   // ── Frame loop ──────────────────────────────────────────────────────────────
 
+  /**
+   * CLOVE fork: only an endless ambient loop (the mascot breathing) is running, so frames are skipped down to ~20 a
+   * second: it looks the same and costs a third (the notch sat at ~50% of a core doing nothing). Anything that
+   * asks for a frame (a hover, a click, a state change) calls ensureRunning(), which ends calm at once.
+   */
+  private calm = false;
+  private lastDraw = 0;
+
+  /**
+   * CLOVE fork: a page he is not on is invisible, but it was still part of the layout, so every frame of the island
+   * opening, closing or changing size re-laid-out all of them (the calendar, the heatmap, the drop zone…). Once a
+   * page has faded out it now leaves the layout altogether (display: none); on its way back it is put back and
+   * flushed first, so its fade-in still plays.
+   */
+  private hideTimers = new Map<string, number>();
+
+  private showView(name: string, el: HTMLElement, on: boolean) {
+    const pending = this.hideTimers.get(name);
+    if (on) {
+      if (pending != null) {
+        window.clearTimeout(pending);
+        this.hideTimers.delete(name);
+      }
+      if (el.style.display === "none") {
+        el.style.display = "";
+        void el.offsetWidth;                        // a first look at it as it is, so the transition has a start
+      }
+      el.classList.add("on");
+      return;
+    }
+    const wasOn = el.classList.contains("on");
+    el.classList.remove("on");
+    if (wasOn) {
+      if (pending == null) {
+        this.hideTimers.set(name, window.setTimeout(() => {
+          this.hideTimers.delete(name);
+          if (!el.classList.contains("on")) el.style.display = "none";
+        }, 360));                                   // after the fade-out (160 ms) and a margin
+      }
+    } else if (pending == null && el.style.display !== "none") {
+      el.style.display = "none";                    // never shown yet: out of the layout from the start
+    }
+  }
+
   ensureRunning() {
+    this.calm = false;
     if (this.running) return;
     this.running = true;
     this.lastFrame = performance.now();
@@ -1296,6 +1341,11 @@ export class Island {
   }
 
   private frame = (nowMs: number) => {
+    if (this.calm && nowMs - this.lastDraw < 40) {
+      requestAnimationFrame(this.frame);
+      return;
+    }
+    this.lastDraw = nowMs;
     const dt = Math.min(0.05, (nowMs - this.lastFrame) / 1000);
     this.lastFrame = nowMs;
 
@@ -1357,6 +1407,9 @@ export class Island {
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
         greetingActive || this.engine.busy || UploadSeq.isActive || viewAnimating;
 
+    this.calm = busy && !settling && !greetingActive && !UploadSeq.isActive && !viewAnimating &&
+      this.botCx.settled && this.botCy.settled && this.botSize.settled &&
+      this.engine.ambientOnly && miniBotsAmbientOnly();
     if (busy) {
       requestAnimationFrame(this.frame);
     } else {
@@ -1514,7 +1567,7 @@ export class Island {
     if (!(expanded && State.view === "live")) this.liveView.resetClicks();
     for (const [name, view] of this.views) {
       const on = name === State.view;
-      view.el.classList.toggle("on", on);
+      this.showView(name, view.el, on);
       if (on) view.sync();
     }
 

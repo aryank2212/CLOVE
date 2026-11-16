@@ -42,6 +42,7 @@ class FakeRec:
         return "ठीक है"
 
 
+turn_taking.has_speech = lambda pcm, min_s=0.15: True       # the pause is silent here: this test is about the language
 tt = turn_taking.TurnTaker(FakeRec(), "hi")
 tt.in_turn, tt.turn_started = True, 1.0
 tt._deciding = True

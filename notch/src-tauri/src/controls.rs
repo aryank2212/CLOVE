@@ -182,6 +182,56 @@ pub async fn open_in_chrome(url: String) -> bool {
     .unwrap_or(false)
 }
 
+// ── Work / DND / Sleep (the header's slider) ───────────────────────────────────
+
+/// The night light was turned on by Sleep (so leaving Sleep turns it off again, but not one he had on).
+static SLEEP_NIGHTLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The desktop's notification Do Not Disturb (Omarchy's shell), if there is one: on or off.
+fn desktop_dnd(on: bool) {
+    let shell = std::path::Path::new("omarchy-shell");
+    if !has("omarchy-shell") {
+        return;
+    }
+    let now = output(shell, &["notifications", "isDnd"]).trim().eq_ignore_ascii_case("on");
+    if now != on {
+        let _ = output(shell, &["notifications", "toggleDnd"]);
+        let _ = output(shell, &["-q", "omarchy.indicators", "refresh"]);
+    }
+}
+
+/// Applies a mode: work | dnd | sleep | off. Returns the mode CLOVE has now (or the mode asked for when CLOVE
+/// isn't running).
+///   work  — CLOVE's focus session; the desktop as usual
+///   dnd   — desktop notifications silenced; CLOVE reads nothing out (it summarises after)
+///   sleep — as dnd, CLOVE not listening, and the night light on
+#[tauri::command]
+pub async fn focus_mode(mode: String) -> String {
+    let mode = match mode.as_str() { "work" | "dnd" | "sleep" => mode, _ => "off".to_string() };
+    let m = mode.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        desktop_dnd(m == "dnd" || m == "sleep");
+        let night = status_now().nightlight;
+        if m == "sleep" && !night {
+            SLEEP_NIGHTLIGHT.store(true, std::sync::atomic::Ordering::Relaxed);
+            toggle_nightlight();
+        } else if m != "sleep" && night && SLEEP_NIGHTLIGHT.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            toggle_nightlight();
+        }
+    })
+    .await;
+    crate::clove_chat::tell_mode(&mode).await.unwrap_or(mode)
+}
+
+fn toggle_nightlight() {
+    if let Some(p) = omarchy("omarchy-toggle-nightlight") {
+        let _ = output(&p, &[]);
+    } else {
+        let on = status_now().nightlight;
+        let _ = output(std::path::Path::new("hyprctl"), &["hyprsunset", "temperature", if on { "6500" } else { "4000" }]);
+    }
+}
+
 // ── Music: whatever MPRIS player is playing ────────────────────────────────────
 
 #[derive(Serialize, Default, Clone)]

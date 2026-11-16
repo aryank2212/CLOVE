@@ -124,6 +124,7 @@ class Assistant:
         self.muted = False            # muted: CLOVE does not listen (Clove Notch's mic button, the window)
         self.silent = False           # silent: CLOVE does not speak or play sounds (Clove Notch's sound button)
         self.held_notes: list[str] = []   # what came in while muted, told on unmute
+        self.quit = lambda: None      # set by agent.py: ends this CLOVE (ctl "quit", Clove Notch's Quit)
         self.mode = "off"             # Clove Notch's Work / DND / Sleep (set_mode)
         self._mode_muted = False      # Sleep muted CLOVE (so leaving Sleep unmutes it)
         self.half_duplex = False

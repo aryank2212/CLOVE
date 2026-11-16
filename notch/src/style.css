@@ -3181,7 +3181,6 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.075);
   border: 1px solid rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(20px) saturate(1.4);
 }
 
 .nf-card {
@@ -3234,7 +3233,6 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
   from {
     opacity: 0;
     transform: translateY(-8px) scale(0.96);
-    filter: blur(2px);
   }
 }
 
@@ -3350,10 +3348,9 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
 /* Music */
 .mp-glow {
   position: absolute;
-  inset: -40%;
-  background-size: cover;
+  inset: 0;
+  background-size: 100% 100%;            /* a 12-pixel copy of the cover stretched out: soft colour, no blur filter */
   background-position: center;
-  filter: blur(34px) saturate(1.6);
   opacity: 0;
   transition: opacity 0.6s ease;
   pointer-events: none;
@@ -3361,7 +3358,7 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
 
 .playing .mp-glow,
 .card:not(.empty) > .mp-glow[style*="url"] {
-  opacity: 0.32;
+  opacity: 0.42;
 }
 
 .mp {
@@ -3979,9 +3976,12 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
 
 .live-music .live-mark i {
   flex: 1;
+  height: 100%;
   background: #fff;
   border-radius: 1px;
+  transform-origin: bottom;
   animation: live-eq 0.9s ease-in-out infinite;
+  will-change: transform;
 }
 
 .live-music .live-mark i:nth-child(2) { animation-delay: -0.3s; }
@@ -3989,8 +3989,8 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
 .live-music .live-mark i:nth-child(4) { animation-delay: -0.15s; }
 
 @keyframes live-eq {
-  0%, 100% { height: 25%; }
-  50% { height: 100%; }
+  0%, 100% { transform: scaleY(0.25); }
+  50% { transform: scaleY(1); }
 }
 
 @keyframes live-blink {
@@ -4193,18 +4193,19 @@ button.wm-city.picking {
 
 .status-bars i {
   width: 3px;
-  height: 40%;
+  height: 100%;
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.75);
   animation: status-breathe 2.4s ease-in-out infinite;
+  will-change: transform, opacity;        /* moved by the graphics layer, not by layout, every frame */
 }
 
 .status-bars i:nth-child(2) { animation-delay: -0.8s; }
 .status-bars i:nth-child(3) { animation-delay: -1.6s; }
 
 @keyframes status-breathe {
-  0%, 100% { height: 35%; opacity: 0.55; }
-  50% { height: 100%; opacity: 1; }
+  0%, 100% { transform: scaleY(0.35); opacity: 0.55; }
+  50% { transform: scaleY(1); opacity: 1; }
 }
 
 /* Compact notch: a timer or alarm going off — icon, words, Stop */
@@ -4284,13 +4285,12 @@ button.wm-city.picking {
   height: 100%;
   min-width: 0;
   box-sizing: border-box;
-  transition: opacity 420ms cubic-bezier(0.32, 0.72, 0, 1), transform 520ms cubic-bezier(0.32, 0.72, 0, 1), filter 420ms ease;
+  transition: opacity 420ms cubic-bezier(0.32, 0.72, 0, 1), transform 520ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .sb-page:not(.current) {
   opacity: 0.35;
   transform: scale(0.94);
-  filter: blur(1.5px);
 }
 
 .sb-page > .card {
@@ -4442,7 +4442,7 @@ button.wm-city.picking {
 .sk-grid i.l1, .sk-legend i.l1 { background: rgba(var(--hue), 0.28); }
 .sk-grid i.l2, .sk-legend i.l2 { background: rgba(var(--hue), 0.5); }
 .sk-grid i.l3, .sk-legend i.l3 { background: rgba(var(--hue), 0.75); }
-.sk-grid i.l4, .sk-legend i.l4 { background: rgb(var(--hue)); box-shadow: 0 0 6px rgba(var(--hue), 0.45); }
+.sk-grid i.l4, .sk-legend i.l4 { background: rgb(var(--hue)); }
 
 .sk-grid i[data-date] {
   transition: transform 120ms ease-out;
@@ -4639,7 +4639,6 @@ button.wm-city.picking {
   }
   .sb-page:not(.current) {
     transform: none;
-    filter: none;
   }
 }
 

@@ -87,6 +87,7 @@ async def amain(args):
         except Exception as e:
             log.error("speaker unavailable (%s); continuing without sound", e)
     clove = holder["j"] = Clove(ui, speaker)
+    clove.quit = stop.set                              # "clove-ctl quit" and Clove Notch's Quit end it cleanly
     if not args.text:
         try:
             mic = clove.mic = Mic(clove.on_mic, config.MIC_DEVICE)
