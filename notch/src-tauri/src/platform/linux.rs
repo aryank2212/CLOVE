@@ -487,6 +487,33 @@ static WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
 fn watch_pointer_leave(win: &WebviewWindow) {
     let _ = POINTER_WIN.set(win.clone());
     start_pointer_watch();
+    watch_hyprland_focus(win.clone());
+}
+
+/// CLOVE fork: a click outside Clove Notch should fold it. A layer surface never hears clicks elsewhere, but on
+/// Hyprland a click on another window (or the desktop) moves the focus, and Hyprland says so on its event socket
+/// (`activewindowv2>>`). Each change goes to the page as `focus-elsewhere`; the page folds only while the pointer
+/// is outside and nothing in Clove Notch is being typed into. Elsewhere (no Hyprland) nothing runs.
+fn watch_hyprland_focus(win: WebviewWindow) {
+    let (Ok(runtime), Ok(sig)) = (std::env::var("XDG_RUNTIME_DIR"), std::env::var("HYPRLAND_INSTANCE_SIGNATURE")) else {
+        return;
+    };
+    let path = std::path::PathBuf::from(runtime).join("hypr").join(sig).join(".socket2.sock");
+    std::thread::spawn(move || {
+        use std::io::BufRead;
+        use tauri::Emitter;
+        loop {
+            if let Ok(stream) = std::os::unix::net::UnixStream::connect(&path) {
+                for line in std::io::BufReader::new(stream).lines() {
+                    let Ok(line) = line else { break };
+                    if line.starts_with("activewindowv2>>") {
+                        let _ = win.emit("focus-elsewhere", ());
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_secs(5));     // Hyprland restarted: try again
+        }
+    });
 }
 
 /// Starts or parks the pointer watch. Called with Clove Notch's collapsed state;

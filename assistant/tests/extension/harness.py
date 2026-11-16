@@ -43,6 +43,8 @@ def serve(tmp: Path):
             host = self.headers.get("Host", "")
             if host.startswith("meet.google"):
                 self.path = "/meet.html"                  # any Meet link shows the mock pre-join page
+            elif host.startswith("translate.google"):
+                self.path = "/result.html"                # the translated page: only its address is checked
             elif self.path in ("/", ""):
                 self.path = "/wa.html" if host.startswith("web.whatsapp") else "/meet.html" if host.startswith("meet.google") else "/complex.html" if host.startswith("complex") else "/form.html"
             super().do_GET()
@@ -67,12 +69,19 @@ class Harness:
         bg = ext / "background.js"
         bg.write_text(bg.read_text().replace("127.0.0.1:8765", f"127.0.0.1:{config.BRIDGE_PORT}"))
         self.srv = serve(self.tmp)
+        # Downloads go to the throwaway folder, never the real ~/Downloads.
+        self.downloads = self.tmp / "downloads"
+        self.downloads.mkdir()
+        (self.tmp / "profile" / "Default").mkdir(parents=True)
+        (self.tmp / "profile" / "Default" / "Preferences").write_text(json.dumps(
+            {"download": {"default_directory": str(self.downloads), "prompt_for_download": False, "directory_upgrade": True}}))
         await bridge.start()
         self.chrome = subprocess.Popen(
             ["google-chrome", "--headless=new", "--no-sandbox", f"--user-data-dir={self.tmp / 'profile'}", "--remote-debugging-port=9333",
              "--enable-unsafe-extension-debugging", "--ignore-certificate-errors", "--window-size=1200,800",
              f"--host-resolver-rules=MAP web.whatsapp.com 127.0.0.1:{HTTPS_PORT}, MAP meet.google.com 127.0.0.1:{HTTPS_PORT}, "
-             f"MAP testsite.local 127.0.0.1:{HTTPS_PORT}, MAP complex.local 127.0.0.1:{HTTPS_PORT}", "about:blank"],
+             f"MAP testsite.local 127.0.0.1:{HTTPS_PORT}, MAP complex.local 127.0.0.1:{HTTPS_PORT}, "
+             f"MAP translate.google.com 127.0.0.1:{HTTPS_PORT}", "about:blank"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(40):
             try:

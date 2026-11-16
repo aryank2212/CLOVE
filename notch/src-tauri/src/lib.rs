@@ -8,6 +8,7 @@ mod clove_chat;
 mod clove_window;
 mod codex_plan;
 mod config_file;
+mod controls;
 mod desktop;
 mod files;
 mod flow;
@@ -17,7 +18,9 @@ mod i18n;
 mod identity;
 mod integrations;
 mod island;
+mod live;
 mod local_chat;
+mod localsend;
 mod log;
 mod net;
 mod notes;
@@ -35,6 +38,7 @@ mod shortcuts;
 mod sounds;
 mod speech;
 mod spotify;
+mod streaks;
 mod tray;
 mod update;
 mod voice;
@@ -373,9 +377,18 @@ fn open_file_in_vscode(path: String) -> bool {
     false
 }
 
+/// CLOVE fork: set by a real Quit (the tray's, the button in the window), not by an update restarting Clove Notch.
+/// Quit then ends the assistant too: it used to run on alone (the microphone, a core of the CPU) after he had quit.
+pub static QUIT_ALL: AtomicBool = AtomicBool::new(false);
+
+pub fn quit_everything(app: &AppHandle) {
+    QUIT_ALL.store(true, Ordering::Relaxed);
+    app.exit(0);
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle) {
-    app.exit(0);
+    quit_everything(&app);
 }
 
 /// Tray → Pause. Paused means paused: the pollers stop talking to the network,
@@ -872,6 +885,23 @@ pub fn run() {
             open_settings_window,
             clove_window::clove_window_url,
             clove_window::clove_start,
+            clove_chat::clove_tell,
+            clove_chat::clove_mute,
+            clove_chat::clove_speech,
+            clove_chat::clove_agenda,
+            controls::controls_status,
+            controls::controls_action,
+            controls::media_state,
+            controls::media_control,
+            controls::open_in_chrome,
+            controls::focus_mode,
+            streaks::streaks_fetch,
+            localsend::localsend_devices,
+            localsend::localsend_answer,
+            localsend::localsend_send,
+            localsend::localsend_me,
+            localsend::localsend_open,
+            localsend::pick_files,
             set_paused,
             shortcuts_status,
             shortcuts_suspend,
@@ -930,6 +960,13 @@ pub fn run() {
             spotify::spotify_control,
             spotify::spotify_open,
             spotify::spotify_installed,
+            live::live_start,
+            live::live_media_control,
+            live::live_action,
+            live::live_fetch,
+            live::live_levels,
+            live::live_set_level,
+            clove_chat::clove_ctl,
             whatsapp::whatsapp_island,
             whatsapp::whatsapp_open,
             whatsapp::whatsapp_close,
@@ -1025,6 +1062,7 @@ pub fn run() {
             pipe::start(handle.clone());
             phone_link::start_if_enabled(&handle);
             integrations::start(handle.clone());
+            localsend::start(&handle);
             spotify::sync(&handle, &loaded.active_integrations);
             // WhatsApp (experimental): nothing runs unless it is turned on and its pill is active.
             whatsapp::start(&handle, &loaded.active_integrations);
@@ -1052,6 +1090,10 @@ pub fn run() {
                 notes::shutdown(app);
                 // GOWA started by CLOVE stops with it; the conversations were only in memory.
                 whatsapp::shutdown();
+                // And the assistant, when this was a Quit.
+                if QUIT_ALL.load(Ordering::Relaxed) {
+                    clove_chat::stop_assistant();
+                }
             }
         });
 }

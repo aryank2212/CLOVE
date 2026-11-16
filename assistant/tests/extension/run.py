@@ -87,6 +87,24 @@ SCENARIO = [
     ("history", "history", {"text": "complex"}, "complex.local"),
     ("close every matching tab", "close", {"tab": "result", "all": True}, "closed"),
     ("reopen it", "reopen", {}, "reopened"),
+    # arranging tabs and windows
+    ("a tab to the first place", "move", {"tab": "Complex", "to": "first"}, "to place 1 of"),
+    ("a tab next to another", "move", {"tab": "Complex", "to": "testsite"}, "next to"),
+    ("a tab into its own window", "move", {"tab": "Complex", "to": "new_window"}, "into a new window"),
+    ("all windows back into one", "merge_windows", {}, "into this window"),
+    ("tabs sorted by site", "sort", {}, "by site"),
+    ("group then ungroup", "group", {"tab": "Complex", "name": "Work"}, 'as "Work"'),
+    ("ungroup every group", "ungroup", {"all": True}, "out of their group"),
+    ("window state checked", "window_state", {"value": "sideways"}, "ERR:fullscreen, maximize"),
+    ("which tab makes sound", "audible", {}, "playing sound"),
+    ("free memory", "discard", {}, "background tab(s) to free memory"),
+    ("the tab on screen stays loaded", "discard", {"tab": "current"}, "ERR:can't be unloaded"),
+    # files
+    ("download the page itself", "download", {"tab": "testsite"}, "saved to Downloads"),
+    ("download a link by its words", "download", {"tab": "Complex", "text": "Open in new tab"}, "saved to Downloads"),
+    ("no such link", "download", {"tab": "Complex", "text": "zzz no such link"}, "ERR:no link or picture"),
+    ("page saved as PDF", "pdf", {"tab": "Complex"}, ".pdf"),
+    ("translate into Hindi", "translate", {"tab": "Complex", "value": "hindi"}, "translate.google.com/translate?sl=auto&tl=hi"),
 ]
 
 

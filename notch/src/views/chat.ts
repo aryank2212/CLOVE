@@ -17,6 +17,11 @@ import { Sound } from "../core/sound";
 import { State, type ChatMessage } from "../core/state";
 import type { ViewHost } from "./views";
 import { N_, t, tl } from "../i18n/i18n";
+import { icon as liveIcon } from "../live/icons";
+import { LiveCtl } from "../live/control";
+
+/** Things to ask CLOVE, offered while the chat is empty: one click asks. */
+const SUGGESTIONS = ["What can you do?", "What's on my screen?", "Set a 10 minute timer", "How is this PC doing?"];
 
 const STRINGS = {
   placeholderFirst: N_("Ask me anything…"),
@@ -44,11 +49,13 @@ function bubble(message: ChatMessage): HTMLElement {
   return h("div", { class: "chat-row" }, reply);
 }
 
-function typingDots(): HTMLElement {
+/** The dots, and next to them what CLOVE is doing right now (a tool it runs). */
+function typingDots(doing: string): HTMLElement {
   return h(
     "div",
-    { class: "chat-row" },
+    { class: "chat-row typing-row" },
     h("div", { class: "typing" }, h("i"), h("i"), h("i")),
+    h("span", { class: "typing-what", text: doing }),
   );
 }
 
@@ -211,7 +218,16 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
     spellcheck: "false",
   }) as HTMLInputElement;
   const send = h("button", { class: "send-btn", title: tl(STRINGS.send) }, svg(ICONS.arrowUp, 11));
-  const bar = h("div", { class: "chat-bar" }, input, send);
+  // Say it instead: wakes the assistant, which listens and answers out loud.
+  const mic = h("button", { class: "mic-btn", title: tl("Talk to CLOVE"), onclick: () => void LiveCtl.listen() }, liveIcon("mic", 15));
+  const bar = h("div", { class: "chat-bar" }, input, mic, send);
+  const suggest = h("div", { class: "chat-suggest" });
+  for (const text of SUGGESTIONS) {
+    suggest.append(h("button", { class: "chat-suggestion", text, onclick: () => {
+      input.value = text;
+      void submit();
+    } }));
+  }
 
   const modelDot = h("i", { class: "model-dot" });
   const modelName = h("span", { class: "model-name" });
@@ -229,7 +245,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
     body.classList.toggle("picking", picker.isOpen);
     drawModelButton();
   });
-  body.append(chipRow, log, picker.el, modelRow, bar);
+  body.append(chipRow, log, suggest, picker.el, modelRow, bar);
 
   const el = h("div", { class: "view" }, h("div", { class: "card wash chat-card" }, body));
   (el.querySelector(".card") as HTMLElement).style.setProperty("--wash", "rgba(99,102,241,0.5)");
@@ -238,6 +254,15 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
   let renderedCount = -1;
   // A local model answers token by token: where its text so far is shown.
   let live: HTMLElement | null = null;
+  /** What CLOVE is doing while it works on the answer: the tool it last started. */
+  let doing = "";
+
+  void onEvent<{ hook_event_name?: string; clove_agent?: string; tool_name?: string; tool_input?: { command?: string } }>("hook", (e) => {
+    if (!sending || e.clove_agent !== "clove" || e.hook_event_name !== "PreToolUse" || !e.tool_name) return;
+    doing = [e.tool_name, e.tool_input?.command].filter(Boolean).join(" · ");
+    const what = log.querySelector(".typing-what");
+    if (what) what.textContent = doing;
+  });
 
   function drawModelButton() {
     const p = providerDef(State.settings.chatProvider);
@@ -270,6 +295,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
     if (picker.isOpen) picker.close();
     input.value = "";
     sending = true;
+    doing = "";
     drawModelButton();
     Sound.play("send");
 
@@ -289,8 +315,8 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
       Sound.play("finish");
     } catch (err) {
       State.stateOverride = null;
-      State.noteMessage = String(err).replace(/^Error:\s*/, "");
-      State.view = "note";
+      // The error is an answer too: it stays in the conversation, which is not lost.
+      State.chatHistory.push({ id: nextId++, role: "assistant", content: `**Couldn't answer.** ${String(err).replace(/^Error:\s*/, "")}` });
       Sound.play("error");
     } finally {
       sending = false;
@@ -333,9 +359,12 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
         renderedCount = count;
         clear(log);
         for (const m of State.chatHistory) log.append(bubble(m));
-        if (thinking) log.append(typingDots());
+        if (thinking) log.append(typingDots(doing));
         log.scrollTop = log.scrollHeight;
       }
+
+      // Nothing asked yet, and it is CLOVE that answers: a few things to ask.
+      suggest.style.display = State.chatHistory.length === 0 && !sending && !picker.isOpen && State.settings.chatProvider === "clove" ? "" : "none";
 
       // Leaving the chat folds the picker away.
       if (State.view !== "prompt" && picker.isOpen) picker.close();

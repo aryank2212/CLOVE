@@ -11,6 +11,7 @@ export type IslandViewName =
   | "question"
   | "error"
   | "finished"
+  | "message"
   | "confused"
   | "upload"
   | "uploading"
@@ -25,7 +26,16 @@ export type IslandViewName =
   | "recap"
   | "wardrobe"
   | "update"
-  | "whatsNew";
+  | "whatsNew"
+  // CLOVE fork: the Controls and Time pages (views/tools.ts).
+  | "controls"
+  | "time"
+  // CLOVE fork: LocalSend: someone wants to send him files (views/localsend.ts).
+  | "receive"
+  // Live activities: music, timers, rides, scores (src/live/view.ts).
+  | "live"
+  // Only the header: where the pointer rests on the pill, every page is one click away.
+  | "bar";
 
 export type BotStateName =
   | "idle"
@@ -59,24 +69,47 @@ export const PANEL_H = 320;
 
 // No notch on a PC: these are the hidden/compact sizes from docs/SPEC.md.
 export const NOTCH_W = 184;
-export const NOTCH_H = 32;
-export const COMPACT_W = 288; // NOTCH_W + 104
+export const NOTCH_H = 36;
+/** The resting pill: CLOVE's mark, alone. */
+export const COMPACT_W = 116;
+/** With the date and time in the middle (Settings → Show the clock). */
+export const COMPACT_CLOCK_W = 216;
+/** The widest the pill grows for a live activity's two sides. */
+export const COMPACT_MAX_W = 420;
+
+/** CLOVE fork: the compact width he picked in Settings: the pill is never narrower than it (0 = not picked). */
+let compactW = 0;
+export const COMPACT_MIN = 240;
+export const COMPACT_MAX = 520;
+export function setCompactWidth(w: number) {
+  compactW = Number.isFinite(w) && w > 0 ? Math.round(Math.min(COMPACT_MAX, Math.max(COMPACT_MIN, w))) : 0;
+}
+export function compactWidth(): number {
+  return compactW;
+}
 export const EXPANDED_W = 640;
 
-export const ROUNDED_CORNER = 14; // hidden / compact
-export const EXPANDED_CORNER = 22;
+// Clove Notch floats just under the top edge, a pill like the Dynamic Island,
+// rather than hanging from it.
+export const TOP_GAP = 6;
+/** Where CLOVE's mark sits in the pill, from its left edge. */
+export const COMPACT_BOT_X = 22;
+
+export const ROUNDED_CORNER = 18; // hidden / compact: half the pill's height
+export const EXPANDED_CORNER = 30;
 
 /** Invisible hover strip that wakes Clove Notch when hidden. */
 export const WAKE_STRIP_W = 240;
 export const WAKE_STRIP_H = 6;
 
 export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
-  overview: { height: 160, botX: 68, botY: null, botDiameter: 58, agentMode: "pills" },
-  empty: { height: 160, botX: 70, botY: null, botDiameter: 62, agentMode: "none" },
+  overview: { height: 156, botX: 68, botY: null, botDiameter: 58, agentMode: "pills" },
+  empty: { height: 124, botX: 70, botY: null, botDiameter: 62, agentMode: "none" },
   approval: { height: 160, botX: 62, botY: null, botDiameter: 56, agentMode: "column" },
   question: { height: 160, botX: 62, botY: null, botDiameter: 56, agentMode: "column" },
   error: { height: 160, botX: 62, botY: null, botDiameter: 58, agentMode: "column" },
   finished: { height: 160, botX: 62, botY: null, botDiameter: 58, agentMode: "column" },
+  message: { height: 160, botX: 62, botY: null, botDiameter: 58, agentMode: "column" },
   confused: { height: 160, botX: 76, botY: null, botDiameter: 66, agentMode: "column" },
   upload: { height: 176, botX: 140, botY: 104, botDiameter: 62, agentMode: "column" },
   // botY 103 = bar top (42 + 58) + 3, so the dot really rides the bar. The Swift
@@ -100,6 +133,13 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   // After an update: what the new version brings, then "Your CLOVE so far".
   // Taller than a card, for two rows of items with their line.
   whatsNew: { height: 222, botX: 62, botY: null, botDiameter: 58, agentMode: "none" },
+  // CLOVE fork: two cards a little taller than the overview's; no CLOVE drawn over them.
+  controls: { height: 240, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
+  time: { height: 212, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
+  receive: { height: 176, botX: -60, botY: 100, botDiameter: 0, agentMode: "none" },
+  // A live activity's card (views/live.ts): it sizes itself, and CLOVE's mark steps aside.
+  bar: { height: 52, botX: 30, botY: 26, botDiameter: 0, agentMode: "none" },
+  live: { height: 176, botX: 30, botY: 30, botDiameter: 0, agentMode: "none" },
 };
 
 // The upload views above are only the fallback geometry. Once a file is actually
@@ -111,7 +151,8 @@ export const QUESTION_PICKER_H = 200;
 
 /** Chat view grows with the conversation — IslandContainer.chatPromptHeight. */
 export function chatPromptHeight(messageCount: number): number {
-  return Math.min(300, 240 + messageCount * 40);
+  // Empty, it is a field and a few suggestions; it grows as the conversation does.
+  return messageCount === 0 ? 176 : Math.min(300, 200 + messageCount * 36);
 }
 
 export function islandSize(
@@ -125,7 +166,7 @@ export function islandSize(
       // slides into the top edge of the screen instead of sitting there as a bar.
       return { w: NOTCH_W, h: 0 };
     case "compact":
-      return { w: COMPACT_W, h: NOTCH_H };
+      return { w: compactW, h: NOTCH_H };
     case "expanded": {
       const h = view === "prompt" ? chatPromptHeight(chatCount) : VIEW_LAYOUTS[view].height;
       return { w: EXPANDED_W, h };
@@ -151,7 +192,7 @@ export function botPosition(
     case "hidden":
       return { cx: 46, cy: 16, diameter: 6, opacity: 0 };
     case "compact":
-      return { cx: 40, cy: 16, diameter: 20, opacity: 1 };
+      return { cx: COMPACT_BOT_X, cy: NOTCH_H / 2, diameter: 20, opacity: 1 };
     case "expanded": {
       const layout = VIEW_LAYOUTS[view];
       if (view === "uploading") {
@@ -163,7 +204,7 @@ export function botPosition(
         };
       }
       if (layout.botY != null) {
-        return { cx: layout.botX, cy: layout.botY, diameter: layout.botDiameter, opacity: 1 };
+        return { cx: layout.botX, cy: layout.botY, diameter: layout.botDiameter, opacity: view === "live" || view === "bar" ? 0 : 1 };
       }
       // Centre of the fixed 84 pt card (8 pt top inset + 34 pt header → content at y = 42)
       const headerBottom = 42;

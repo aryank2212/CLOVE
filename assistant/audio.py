@@ -52,6 +52,8 @@ class Speaker:
         self._stream.start()
 
     def write(self, pcm: bytes):
+        if getattr(self, "silent", False):       # "mute audio" on Clove Notch: nothing is played, speech or sounds
+            return
         with self._lock:
             self._buf.extend(pcm)
 
@@ -168,18 +170,23 @@ class Mic:
 
 
 def _pactl_json(*args):
+    """pactl's answer as JSON, or None when it failed (timed out, errored, or wrote something unreadable): an
+    unanswered question is not the same as "there are no devices"."""
     try:
-        return json.loads(subprocess.run(["pactl", "-f", "json", *args], capture_output=True, text=True,
-                                         timeout=4).stdout)
+        r = subprocess.run(["pactl", "-f", "json", *args], capture_output=True, text=True, timeout=4)
+        out = json.loads(r.stdout) if r.returncode == 0 else None
+        return out if isinstance(out, list) else None
     except (OSError, ValueError, subprocess.SubprocessError):
-        return []
+        return None
 
 
-def _default(kind: str) -> str:
+def _default(kind: str) -> str | None:
+    """The default sink or source, "" when there is none, None when pactl did not answer."""
     try:
-        return subprocess.run(["pactl", f"get-default-{kind}"], capture_output=True, text=True, timeout=3).stdout.strip()
+        r = subprocess.run(["pactl", f"get-default-{kind}"], capture_output=True, text=True, timeout=3)
+        return r.stdout.strip() if r.returncode == 0 else None
     except (OSError, subprocess.SubprocessError):
-        return ""
+        return None
 
 
 HEADSET_FORMS = {"headset", "headphone", "hands-free", "handset", "portable"}
@@ -194,6 +201,7 @@ class Route:
     headset: bool = False        # speaker and mic are the same headset/headphones
     echo_possible: bool = True   # can the mic hear the speaker?
     tail: float = 0.4            # seconds to keep ignoring the mic after Clove stops talking
+    ok: bool = True              # PipeWire answered every question; False: this reading is not to be acted on
 
     @property
     def label(self) -> str:
@@ -212,9 +220,12 @@ def pick_route(prefer_headset: bool | None = None) -> Route:
     '.monitor' (a loopback of whatever plays), which would make Clove hear music and himself, not you."""
     import config
     prefer_headset = config.PREFER_HEADSET_MIC if prefer_headset is None else prefer_headset
-    sinks = [x for x in _pactl_json("list", "sinks") if not x["name"].endswith(".monitor")]
-    sources = [x for x in _pactl_json("list", "sources") if not x["name"].endswith(".monitor")]
-    sink = next((x for x in sinks if x["name"] == _default("sink")), None)
+    all_sinks, all_sources = _pactl_json("list", "sinks"), _pactl_json("list", "sources")
+    default_sink, default_source = _default("sink"), _default("source")
+    ok = None not in (all_sinks, all_sources, default_sink, default_source)
+    sinks = [x for x in all_sinks or [] if not x["name"].endswith(".monitor")]
+    sources = [x for x in all_sources or [] if not x["name"].endswith(".monitor")]
+    sink = next((x for x in sinks if x["name"] == default_sink), None)
     info = lambda x, k: (x.get("properties") or {}).get(k)                                   # noqa: E731
     desc = lambda x: (x.get("description") or x["name"]) if x else ""                        # noqa: E731
 
@@ -224,15 +235,38 @@ def pick_route(prefer_headset: bool | None = None) -> Route:
     headset_like = sink is not None and (info(sink, "device.form_factor") in HEADSET_FORMS)
     if mate is not None and headset_like and prefer_headset:
         return Route(sink["name"], desc(sink), mate["name"], desc(mate), True, False,
-                     0.9 if sink["name"].startswith("bluez") else 0.4)
+                     0.9 if sink["name"].startswith("bluez") else 0.4, ok)
 
-    default = _default("source")
-    src = next((x for x in sources if x["name"] == default), None)
+    src = next((x for x in sources if x["name"] == default_source), None)
     if src is None and sources:                       # default is a monitor/missing: best real input
         sources.sort(key=lambda x: (x["name"].startswith("bluez"), x["state"] == "SUSPENDED"))
         src = sources[0]
     tail = 0.9 if (sink and sink["name"].startswith("bluez")) else 0.4
-    return Route(sink["name"] if sink else "", desc(sink), src["name"] if src else "", desc(src), False, True, tail)
+    return Route(sink["name"] if sink else "", desc(sink), src["name"] if src else "", desc(src), False, True, tail, ok)
+
+
+class MicFollower:
+    """When CLOVE's microphone should move to another source. Only for a choice that is the same on two looks in a
+    row: while headphones are plugged in or a Bluetooth profile changes, a device can vanish for a moment, and
+    pactl can fail to answer; moving the microphone on such a reading (and back on the next) closed and reopened it
+    every few seconds, deaf in between."""
+
+    def __init__(self, looks: int = 2):
+        self.looks, self.pending, self.seen = looks, None, 0
+
+    def step(self, current: str, route: "Route") -> str | None:
+        """The source to switch to now, or None."""
+        if not route.ok:                       # an unanswered question neither confirms nor cancels a change
+            return None
+        if route.source == current:
+            self.pending, self.seen = None, 0
+            return None
+        self.seen = self.seen + 1 if route.source == self.pending else 1
+        self.pending = route.source
+        if self.seen < self.looks:
+            return None
+        self.pending, self.seen = None, 0
+        return route.source
 
 
 def pick_mic() -> str:

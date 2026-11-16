@@ -103,6 +103,8 @@ pub struct Settings {
     pub show_clock: bool,
     /// CLOVE fork: the compact island never hides itself (it still hides while paused). On by default.
     pub keep_visible: bool,
+    /// CLOVE fork: how wide the compact island is, in logical pixels (the settings window's slider, 240–520).
+    pub compact_width: f64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -171,6 +173,7 @@ impl Default for Settings {
             phone_relay_url: String::new(),
             show_clock: false,
             keep_visible: true,
+            compact_width: 288.0,
         }
     }
 }
@@ -460,7 +463,8 @@ mod tests {
   "phoneRelay": true,
   "phoneRelayUrl": "wss://relay.example.workers.dev",
   "showClock": true,
-  "keepVisible": true
+  "keepVisible": true,
+  "compactWidth": 360.0
 }"##;
 
     fn custom() -> Value {
@@ -980,6 +984,7 @@ mod tests {
                 "phoneRelayUrl",
                 "showClock",
                 "keepVisible",
+                "compactWidth",
             ]
         );
         let _ = std::fs::remove_dir_all(&dir);

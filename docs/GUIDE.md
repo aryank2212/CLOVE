@@ -42,6 +42,9 @@ whenever Chrome runs; CLOVE opens Chrome itself when it needs the browser.
 |---|---|
 | "open my LeetCode bookmark", "open a terminal", "what time is it" | Clove, instantly |
 | "write a script that…", "make a note…", "volume down", "pause the music", "remind me in 20 minutes" | Clove, instantly |
+| "remind me tomorrow at 9 to call the bank", "move that reminder to 10", "add renew passport by friday to my list", "what's on my calendar today?" | Clove: kept until due (also across restarts), and shown on Clove Notch's Controls and Time pages |
+| "open a terminal and run htop", "quit Steam", "force quit Chrome" | Clove: your own terminal (`$TERMINAL` / `xdg-terminal-exec`); quitting closes the app's windows (force quit asks first) |
+| "download that PDF", "save this page as a PDF", "translate this page to Hindi", "put all my tabs in one window", "which tab is playing sound?" | Clove Hands, in your Chrome |
 | "install htop", "maximize Chrome" (needs the Window Calls extension) | Clove, after you approve the plan |
 | "add a settings page to my clove project", "build me a Flask app…" | Claude Code in a terminal (complex work only) |
 | "star the anthropic SDK repo on GitHub", "fill in this form" | Claude in Chrome |
@@ -341,6 +344,42 @@ its chat asks CLOVE itself (over `~/.local/state/clove/ctl.sock`), and CLOVE sho
 **Allow / Deny** (`notch.py`). If Clove Notch isn't running, CLOVE simply doesn't report there. Clove Notch's window
 is also CLOVE's: its **Assistant** pages show this folder's `ui/` (it reads the address from
 `$XDG_RUNTIME_DIR/clove.url`), and offer to start the `clove` service when CLOVE isn't running.
+
+
+## Instagram DMs (official API)
+
+Instagram's desktop notifications don't say who wrote. With Instagram's own API CLOVE gets every DM with the
+sender's name and @username, and can reply, with no browser and no password (`assistant/instagram.py`).
+
+1. In the Instagram app: Settings › Account type and tools › Switch to professional account › Creator (free).
+2. At developers.facebook.com: Create app › "Other" › Business › add the **Instagram** product ›
+   "API setup with Instagram login". Add your Instagram account (you're its admin, so no app review is needed)
+   and **Generate token**: that is `IG_ACCESS_TOKEN`. The app secret on the same page is `IG_APP_SECRET`.
+3. A public address for this PC's port 8790 (e.g. a Cloudflare tunnel hostname pointing at it).
+4. In the same page's **Configure webhooks**: Callback URL `https://<your hostname>/instagram`, Verify token =
+   your `IG_VERIFY_TOKEN`, then subscribe to **messages**.
+5. Put the three values in `assistant/.env` and restart CLOVE.
+
+Replies work within 24 hours of their last message. The token lasts 60 days; CLOVE renews it every few weeks.
+
+## If CLOVE won't start
+
+Look at `journalctl --user -u clove -n 30`. If it says `No module named 'dotenv'` (or another package), CLOVE's Python
+environment (`assistant/.venv`) has lost the Python it was built with. This happens when a version manager such as mise
+upgrades Python and moves its `latest` link: the packages stay in the environment, but it now starts under a Python
+that has none of them. `run.sh` notices and shows a notification instead of failing quietly.
+
+Fix, quick: point the environment back at the Python it was made with (the number is `version =` in `.venv/pyvenv.cfg`):
+
+```bash
+cd assistant/.venv
+ln -sfn ~/.local/share/mise/installs/python/3.14.7/bin/python3 bin/python3
+sed -i 's#installs/python/latest/bin#installs/python/3.14.7/bin#' pyvenv.cfg
+systemctl --user reset-failed clove; systemctl --user start clove
+```
+
+Fix, lasting: rebuild it with a Python you will keep (`python3.14 -m venv .venv && .venv/bin/pip install -r requirements.txt`),
+or tell mise to keep that version (`mise use python@3.14`).
 
 ## Code map
 

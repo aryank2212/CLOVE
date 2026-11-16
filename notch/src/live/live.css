@@ -1,0 +1,1406 @@
+/* Live activities (views/live.ts) and the floating pill they live in.
+   Everything here is black on black with one accent per activity, as on the
+   Dynamic Island: the content is the only colour. */
+
+/* ── The pill ───────────────────────────────────────────────────────────────── */
+
+#island {
+  box-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.09),
+    0 10px 30px -8px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+  transition: box-shadow 0.3s ease;
+}
+
+/* Retracted: nothing of it may show, not even its outline. */
+#island.gone {
+  box-shadow: none;
+}
+
+.live-compact {
+  position: absolute;
+  top: 0;
+  left: 38px;
+  right: 12px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 26px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  font: 600 12.5px/1 var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.live-compact.on {
+  opacity: 1;
+  transition: opacity 0.3s ease 0.14s;
+}
+
+.live-compact:not(.on) * {
+  animation-play-state: paused !important;
+}
+
+/* A new activity takes the pill: both sides arrive from a blur. */
+.live-compact.swap .lc-lead,
+.live-compact.swap .lc-trail {
+  animation: lc-arrive 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@keyframes lc-arrive {
+  from { opacity: 0; filter: blur(6px); transform: scale(0.82); }
+  to { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+
+.lc-lead,
+.lc-trail {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.lc-lead { transform-origin: left center; }
+.lc-trail { transform-origin: right center; }
+
+.lc-label {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 500;
+}
+
+.lc-label:empty,
+.lc-value:empty { display: none; }
+
+.lc-value { font-weight: 650; letter-spacing: 0.01em; }
+.lc-score { font-weight: 650; letter-spacing: 0.02em; }
+
+.lc-glyph {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
+
+.lc-turn {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: #0a84ff;
+  color: #fff;
+}
+
+.lv-blink { animation: lv-pulse 1.1s ease-in-out infinite; }
+
+@keyframes lv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Recording dot. */
+.lc-rec {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff453a;
+  opacity: 0.4;
+  flex: 0 0 auto;
+}
+
+.lc-rec.on {
+  opacity: 1;
+  box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.6);
+  animation: lc-rec 1.6s ease-out infinite;
+}
+
+@keyframes lc-rec {
+  0% { box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.55); }
+  100% { box-shadow: 0 0 0 7px rgba(255, 69, 58, 0); }
+}
+
+.lc-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6b7079;
+}
+
+.lc-live.on { background: #ff453a; animation: lv-pulse 1.4s ease-in-out infinite; }
+
+/* Camera (green) and microphone (orange) in use. */
+.lc-dots {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: -16px;
+  padding-left: 2px;
+  flex: 0 0 auto;
+}
+
+.lc-dots.on { display: flex; }
+
+
+.lc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: none;
+}
+
+.lc-dot.on { display: block; }
+.lc-dot.mic { background: #ff9f0a; box-shadow: 0 0 6px rgba(255, 159, 10, 0.7); }
+.lc-dot.cam { background: #30d158; box-shadow: 0 0 6px rgba(48, 209, 88, 0.7); }
+.lc-dot.big { width: 10px; height: 10px; }
+
+.lc-spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  animation: lv-spin 0.8s linear infinite;
+}
+
+@keyframes lv-spin { to { transform: rotate(360deg); } }
+
+/* The second activity, in its own bubble. */
+.live-bubble {
+  position: absolute;
+  top: 0;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: #000;
+  display: grid;
+  place-items: center;
+  cursor: default;
+  opacity: 0;
+  transform: scale(0.4);
+  pointer-events: none;
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.09), 0 6px 18px -6px rgba(0, 0, 0, 0.55);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.live-bubble.on.shown {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+  transition: opacity 0.3s ease 0.1s, transform 0.5s cubic-bezier(0.3, 1.5, 0.4, 1) 0.1s;
+}
+
+.live-bubble:active { transform: scale(0.9); }
+
+/* ── Shared pieces ──────────────────────────────────────────────────────────── */
+
+.lv-eq {
+  display: flex;
+  align-items: center;
+  gap: 2.5px;
+  height: 16px;
+  color: #fff;
+}
+
+.lv-eq i {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: currentColor;
+  transform: scaleY(0.3);
+  animation: lv-eq 0.9s ease-in-out infinite;
+}
+
+.lv-eq i:nth-child(1) { animation-duration: 0.82s; animation-delay: -0.2s; }
+.lv-eq i:nth-child(2) { animation-duration: 0.64s; animation-delay: -0.5s; }
+.lv-eq i:nth-child(3) { animation-duration: 0.96s; animation-delay: -0.1s; }
+.lv-eq i:nth-child(4) { animation-duration: 0.72s; animation-delay: -0.65s; }
+.lv-eq i:nth-child(5) { animation-duration: 0.88s; animation-delay: -0.35s; }
+
+.lv-eq.paused i { animation: none; transform: scaleY(0.22); opacity: 0.5; }
+
+@keyframes lv-eq {
+  0%, 100% { transform: scaleY(0.25); }
+  50% { transform: scaleY(1); }
+}
+
+.lv-levels {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 18px;
+  color: #ff453a;
+}
+
+.lv-levels i {
+  width: 2.5px;
+  height: 100%;
+  border-radius: 2px;
+  background: currentColor;
+  transform: scaleY(0.12);
+  transition: transform 0.1s linear;
+}
+
+.lv-brand {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  line-height: 1;
+  flex: 0 0 auto;
+  letter-spacing: -0.02em;
+}
+
+.lv-art {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--accent, #fff) 55%, #000), #16171a);
+}
+
+.lv-art-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.lv-art-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.lv-ring { position: relative; flex: 0 0 auto; }
+.lv-ring svg { display: block; }
+.lv-ring-track { stroke: rgba(255, 255, 255, 0.14); }
+.lv-ring-fill { transition: stroke-dashoffset 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+.lv-ring-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 650 13px/1 var(--font);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The live view ──────────────────────────────────────────────────────────── */
+
+.live-view {
+  display: flex;
+  flex-direction: column;
+  margin: -2px 0 -2px;
+}
+
+.lv-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.lv-card {
+  position: absolute;
+  inset: 0;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font);
+  color: var(--ink);
+  --accent: #fff;
+}
+
+.lv-card.enter { animation: lv-enter 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+
+@keyframes lv-enter {
+  from { opacity: 0; filter: blur(8px); transform: scale(0.94); }
+  to { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+
+.lv-card.lv-line {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 0 14px;
+}
+
+.lv-card.lv-center {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.lv-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lv-row.top { align-items: flex-start; }
+.lv-row.tight { gap: 7px; }
+.lv-row.baseline { align-items: flex-end; gap: 12px; }
+
+.lv-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.lv-col.end { align-items: flex-end; }
+.lv-col.center { align-items: center; text-align: center; }
+.grow { flex: 1 1 auto; min-width: 0; }
+
+.lv-title {
+  font: 600 15.5px/1.2 var(--font);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lv-sub {
+  font: 500 12px/1.25 var(--font);
+  color: rgba(235, 235, 245, 0.56);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lv-sub.end { text-align: right; }
+.lv-sub.center { text-align: center; }
+.lv-sub:empty, .lv-title:empty { display: none; }
+
+.lv-time {
+  font: 500 11px/1 var(--font);
+  font-variant-numeric: tabular-nums;
+  color: rgba(235, 235, 245, 0.5);
+  min-width: 34px;
+}
+
+.lv-time:last-child { text-align: right; }
+
+/* Buttons: round, filled with a tint of what they do. */
+.lv-btn {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: default;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  transition: transform 0.12s ease-out, background 0.15s ease, opacity 0.15s ease;
+}
+
+.lv-btn:hover { background: rgba(255, 255, 255, 0.2); }
+.lv-btn:active { transform: scale(0.88); }
+.lv-btn:disabled { opacity: 0.28; pointer-events: none; }
+.lv-btn.small { width: 30px; height: 30px; }
+.lv-btn.ghost { background: transparent; }
+.lv-btn.ghost:hover { background: rgba(255, 255, 255, 0.1); }
+.lv-btn.big { width: 48px; height: 48px; }
+.lv-btn.green { background: #30d158; }
+.lv-btn.green:hover { background: #3ee06a; }
+.lv-btn.red { background: #ff453a; }
+.lv-btn.red:hover { background: #ff5d53; }
+.lv-btn.orange { background: rgba(255, 159, 10, 0.24); color: #ff9f0a; }
+.lv-btn.orange:hover { background: rgba(255, 159, 10, 0.34); }
+.lv-btn.grey { background: rgba(255, 255, 255, 0.14); }
+
+.lv-btn.red-ring {
+  background: transparent;
+  box-shadow: inset 0 0 0 2.5px #fff;
+  color: #ff453a;
+}
+
+.lv-btn.red-ring:hover { background: rgba(255, 69, 58, 0.16); }
+
+.lv-pill {
+  height: 30px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 999px;
+  font: 600 12.5px/1 var(--font);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: default;
+  flex: 0 0 auto;
+  transition: transform 0.12s ease-out, background 0.15s ease;
+}
+
+.lv-pill:hover { background: rgba(255, 255, 255, 0.2); }
+.lv-pill:active { transform: scale(0.94); }
+.lv-pill.red { background: #ff453a; }
+.lv-pill.on { background: #fff; color: #000; }
+
+.lv-bar {
+  position: relative;
+  flex: 1 1 auto;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+.lv-bar.seekable { cursor: pointer; }
+
+.lv-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #fff;
+  transition: width 0.3s linear;
+}
+
+.lv-avatar {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 650 16px/1 var(--font);
+  color: #fff;
+  background: linear-gradient(160deg, #8e8e93, #48484a);
+}
+
+.lv-avatar.small { width: 28px; height: 28px; font-size: 11px; }
+
+/* ── Media ──────────────────────────────────────────────────────────────────── */
+
+.lv-media { padding: 12px 14px 8px; }
+.lv-media .lv-art { box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--accent) 60%, transparent); }
+.lv-media .lv-eq { color: var(--accent); height: 18px; }
+.lv-source { font: 600 10.5px/1 var(--font); color: var(--accent); letter-spacing: 0.02em; }
+.lv-progress { gap: 8px; }
+.lv-controls { justify-content: center; gap: 18px; margin-top: -4px; }
+.lv-side { flex: 1 1 0; display: flex; }
+.lv-side.end { justify-content: flex-end; }
+
+/* ── Call ───────────────────────────────────────────────────────────────────── */
+
+.ringing .lv-avatar { animation: lv-ring 1.5s ease-out infinite; }
+
+@keyframes lv-ring {
+  0% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.55); }
+  100% { box-shadow: 0 0 0 12px rgba(48, 209, 88, 0); }
+}
+
+/* ── Voice ──────────────────────────────────────────────────────────────────── */
+
+.lv-voice {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 0 18px;
+}
+
+.lv-orb {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 35% 30%, #ffc48a, #fb923c 45%, #b4500f 100%);
+  box-shadow: 0 0 28px -4px rgba(251, 146, 60, 0.7);
+  animation: lv-breathe 2.4s ease-in-out infinite;
+}
+
+.lv-orb .lv-eq { color: #2a1203; height: 22px; }
+.lv-voice[data-phase="thinking"] .lv-orb,
+.lv-voice[data-phase="working"] .lv-orb { animation-duration: 1s; }
+.lv-voice[data-phase="thinking"] .lv-eq i,
+.lv-voice[data-phase="working"] .lv-eq i { animation-duration: 1.6s; }
+
+@keyframes lv-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
+
+.lv-voice .lv-sub { color: #fb923c; font-weight: 600; }
+.lv-heard { font: 500 13px/1.3 var(--font); color: rgba(235, 235, 245, 0.6); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lv-reply { font: 500 14.5px/1.3 var(--font); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.lv-heard:empty, .lv-reply:empty { display: none; }
+
+/* ── Timer, stopwatch ───────────────────────────────────────────────────────── */
+
+.lv-timer { gap: 10px; }
+.lv-timer-label { font: 600 14px/1 var(--font); color: #ff9f0a; max-width: 120px; flex: 0 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.lv-timer-time {
+  font: 300 40px/1 var(--font);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: #ff9f0a;
+}
+
+.lv-timer-time.small { font-size: 26px; font-weight: 400; color: #fff; }
+.lv-timer-time.red { color: #ff453a; }
+.lv-timer-time.green { color: #30d158; font-size: 13px; font-weight: 600; }
+.lv-timer-time:empty { display: none; }
+
+.lv-timer-bar {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 9px;
+  height: 3px;
+  flex: none;
+  background: rgba(255, 159, 10, 0.18);
+}
+
+.lv-timer-bar .lv-bar-fill { background: #ff9f0a; transition: width 0.5s linear; }
+.lv-timer.done .lv-timer-time, .lv-timer.done .lv-timer-label { animation: lv-pulse 0.9s ease-in-out infinite; }
+
+.lv-rec-time { font: 600 13px/1 var(--font); color: #ff453a; font-variant-numeric: tabular-nums; }
+
+/* ── Navigation ─────────────────────────────────────────────────────────────── */
+
+.lv-nav { padding: 12px 12px 10px 14px; }
+
+.lv-turn {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  background: #0a84ff;
+  color: #fff;
+  box-shadow: 0 6px 18px -6px rgba(10, 132, 255, 0.8);
+}
+
+.lv-nav-dist { font: 650 22px/1 var(--font); letter-spacing: -0.02em; }
+.lv-nav-dist:empty { display: none; }
+.lv-nav-text { font: 500 13.5px/1.25 var(--font); color: rgba(235, 235, 245, 0.8); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lv-nav-eta { font: 600 12px/1.2 var(--font); color: #30d158; margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-nav-foot { gap: 8px; }
+
+.lv-map {
+  width: 132px;
+  height: 104px;
+  flex: 0 0 auto;
+  border-radius: 16px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 100% 17px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 22px 100%,
+    #15171c;
+  overflow: hidden;
+}
+
+.lv-map.empty { display: none; }
+.lv-map svg { display: block; width: 100%; height: 100%; }
+.lv-map polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.lv-map-ahead { stroke: #0a84ff; stroke-width: 4; }
+.lv-map-done { stroke: #3a3f4b; stroke-width: 4; }
+.lv-map-end { fill: #ff453a; stroke: #fff; stroke-width: 1.5; }
+.lv-map-me { fill: #fff; stroke: #0a84ff; stroke-width: 2.5; }
+
+/* ── Rides and orders ───────────────────────────────────────────────────────── */
+
+.lv-trackcard { padding: 14px 16px 12px; }
+.lv-trackcard .lv-title { font-size: 17px; }
+
+.lv-track {
+  position: relative;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lv-track-line,
+.lv-track-fill {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 4px;
+}
+
+.lv-track-line { right: 15px; background: #2c2c2e; }
+
+.lv-track-fill {
+  width: calc((100% - 30px) * var(--p, 0));
+  background: var(--accent);
+  transition: width 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* The end of the filled part fades into what is still to come. */
+.lv-track-fill::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 0;
+  width: 34px;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  opacity: calc(1 - var(--p, 0) * var(--p, 0) * var(--p, 0));
+}
+
+.lv-node {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #2c2c2e;
+  color: rgba(235, 235, 245, 0.45);
+  transition: background 0.5s ease, color 0.5s ease, transform 0.5s cubic-bezier(0.3, 1.6, 0.4, 1);
+}
+
+.lv-node.on {
+  background: var(--accent);
+  color: rgba(0, 0, 0, 0.78);
+  transform: scale(1.06);
+}
+
+.lv-who { font: 600 13.5px/1 var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.lv-otp {
+  font: 650 12px/1 var(--font);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Sports ─────────────────────────────────────────────────────────────────── */
+
+.lv-sports { padding: 14px 16px 12px; justify-content: center; gap: 10px; }
+.lv-scoreline { gap: 10px; }
+.lv-team { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 62px; flex: 0 0 auto; }
+
+.lv-team-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 750 11px/1 var(--font);
+  letter-spacing: 0.02em;
+  color: #fff;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+.lv-team-name { font: 500 10.5px/1.1 var(--font); color: rgba(235, 235, 245, 0.6); max-width: 62px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-team-score { font: 650 30px/1 var(--font); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; flex: 0 0 auto; }
+.lv-team-score.long { font-size: 21px; }
+.lv-team-score.dim { color: rgba(235, 235, 245, 0.45); }
+
+.lv-match-status {
+  font: 650 11px/1 var(--font);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lv-match-status.live { background: #ff453a; color: #fff; }
+.lv-match-summary { white-space: nowrap; }
+
+/* ── Stocks ─────────────────────────────────────────────────────────────────── */
+
+.lv-stock { padding: 12px 14px 0; gap: 4px; }
+.lv-stock .lv-sub:first-child { font-weight: 650; letter-spacing: 0.04em; }
+.lv-price { font: 300 36px/1 var(--font); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.lv-change { font: 600 12px/1.15 var(--font); font-variant-numeric: tabular-nums; }
+.lv-spark { flex: 1 1 auto; min-height: 44px; margin: 0 -14px; }
+.lv-spark svg { display: block; width: 100%; height: 100%; }
+.lv-spark.empty svg { visibility: hidden; }
+.lv-spark-line { stroke: currentColor; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.lv-spark-base { stroke: rgba(255, 255, 255, 0.28); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+
+/* ── Authentication, payment ────────────────────────────────────────────────── */
+
+.lv-auth-glyph { display: grid; place-items: center; height: 56px; color: #fff; }
+.lv-auth[data-state="ok"] .lv-auth-glyph { color: #30d158; }
+.lv-auth[data-state="fail"] .lv-auth-glyph { color: #ff453a; animation: lv-shake 0.42s ease-in-out; }
+.lv-auth[data-state="pending"] .lv-auth-glyph { animation: lv-pulse 1.2s ease-in-out infinite; }
+.lv-auth-text { font: 600 13px/1.2 var(--font); color: rgba(235, 235, 245, 0.8); }
+
+@keyframes lv-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-7px); }
+  40%, 80% { transform: translateX(7px); }
+}
+
+.lv-tick {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #30d158;
+  box-shadow: inset 0 0 0 3px #30d158;
+  animation: lv-pop 0.5s cubic-bezier(0.3, 1.6, 0.4, 1) both;
+}
+
+.lv-tick.ring { background: #30d158; color: #04200d; box-shadow: 0 0 26px -4px rgba(48, 209, 88, 0.8); width: 46px; height: 46px; }
+
+.lv-tick svg path {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: lv-draw 0.4s ease-out 0.22s forwards;
+}
+
+@keyframes lv-pop {
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes lv-draw { to { stroke-dashoffset: 0; } }
+
+.lv-pay-amount { font: 600 24px/1 var(--font); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+/* ── Devices, battery, hotspot, camera ──────────────────────────────────────── */
+
+.lv-device-glyph {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lv-device-glyph.green { color: #30d158; background: rgba(48, 209, 88, 0.16); }
+
+.lv-batt {
+  position: relative;
+  width: 44px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.45);
+  padding: 3px;
+  margin-right: 4px;
+}
+
+.lv-batt-level { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+.lv-batt-cap { position: absolute; right: -4px; top: 7px; width: 2.5px; height: 8px; border-radius: 0 2px 2px 0; background: rgba(255, 255, 255, 0.45); }
+.charging .lv-batt-level { animation: lv-pulse 1.6s ease-in-out infinite; }
+
+/* ── Hub ────────────────────────────────────────────────────────────────────── */
+
+.lv-hub { padding: 10px 12px 4px; justify-content: flex-start; }
+.lv-hub-body { display: flex; flex-direction: column; gap: 9px; height: 100%; min-height: 0; }
+.lv-hub-head { display: flex; align-items: center; gap: 9px; }
+
+.lv-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.lv-tile {
+  border: 0;
+  border-radius: 18px;
+  background: #1c1c1e;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 11px 12px 10px;
+  cursor: default;
+  transition: transform 0.14s ease-out, background 0.15s ease;
+}
+
+.lv-tile:hover { background: #2a2a2d; }
+.lv-tile:active { transform: scale(0.95); }
+.lv-tile-glyph { display: grid; place-items: center; }
+.lv-tile-label { font: 600 12px/1 var(--font); white-space: nowrap; }
+
+.lv-presets, .lv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lv-presets .lv-pill { height: 28px; padding: 0 11px; font-size: 12px; }
+
+.lv-input {
+  width: 100%;
+  height: 34px;
+  border: 0;
+  outline: 0;
+  border-radius: 11px;
+  padding: 0 12px;
+  background: #1c1c1e;
+  color: #fff;
+  font: 500 13px/1 var(--font);
+  user-select: text;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.lv-input:focus { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.3); }
+.lv-input::placeholder { color: rgba(235, 235, 245, 0.35); }
+
+.lv-chip {
+  height: 26px;
+  padding: 0 9px 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font: 600 11.5px/1 var(--font);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.lv-chip svg { opacity: 0.55; }
+.lv-chip:hover { background: rgba(255, 69, 58, 0.3); }
+.lv-error { font: 500 12px/1.2 var(--font); color: #ff6961; }
+.lv-error:empty { display: none; }
+
+.lv-matches { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: hidden; }
+
+.lv-match {
+  border: 0;
+  border-radius: 10px;
+  background: #1c1c1e;
+  color: #fff;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: default;
+}
+
+.lv-match:hover { background: #2a2a2d; }
+.lv-match-teams { font: 600 12px/1 var(--font); font-variant-numeric: tabular-nums; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.lv-match.live .lv-sub { color: #ff453a; font-weight: 700; }
+
+.lv-status { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.lv-status-row { display: flex; align-items: center; gap: 9px; height: 24px; }
+.lv-status-glyph { width: 18px; display: grid; place-items: center; }
+.lv-status-label { font: 500 12.5px/1 var(--font); flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-status-value { font: 500 12.5px/1 var(--font); color: rgba(235, 235, 245, 0.6); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── Dock ───────────────────────────────────────────────────────────────────── */
+
+.lv-dock {
+  height: 38px;
+  flex: 0 0 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 0 10px;
+}
+
+.lv-dock-group { display: flex; align-items: center; gap: 6px; }
+
+.lv-dock-chip {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #1c1c1e;
+  cursor: default;
+  transition: transform 0.14s ease-out, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lv-dock-chip.plain { color: rgba(235, 235, 245, 0.6) !important; }
+.lv-dock-chip:hover { background: #2c2c2e; }
+.lv-dock-chip:active { transform: scale(0.88); }
+.lv-dock-chip.on { box-shadow: inset 0 0 0 1.5px currentColor; background: #2c2c2e; }
+.lv-dock-chip.plain.on { color: #fff !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-card.enter, .live-compact.swap .lc-lead, .live-compact.swap .lc-trail, .lv-tick { animation-duration: 0.01s; }
+  .lv-eq i, .lv-orb, .lv-blink, .lc-rec.on { animation: none; }
+}
+
+/* The clock fills the pill beside CLOVE's mark, now that nothing else sits at its right end. */
+#island-clock { left: 40px; right: 16px; }
+
+/* A card that opens something when clicked says so. */
+.lv-stage.linked .lv-card { cursor: pointer; }
+.lv-stage.linked .lv-card button, .lv-stage.linked .lv-card .lv-bar { cursor: default; }
+.lv-stage.linked .lv-card .lv-bar.seekable { cursor: pointer; }
+
+/* Lists longer than their card scroll, without a bar drawn over the island. */
+.lv-scroll { overflow-y: auto; overscroll-behavior: contain; }
+#island * { scrollbar-width: none; }
+#island *::-webkit-scrollbar { display: none; }
+
+/* ── The rest of the notch, in the same hand ────────────────────────────────────
+   The views that came before the live activities (sessions, chat, settings,
+   approvals) wear the same things: black, one weight of grey for what is
+   secondary, round controls, no outlines. */
+
+/* The line that counted down to closing is gone: the island just folds. */
+#countdown { display: none; }
+
+#content { padding: 10px 12px 12px; }
+#header { height: 32px; flex-basis: 32px; margin: 0 -2px 4px; }
+.tabs { gap: 6px; padding-left: 4px; }
+
+.tab,
+.header-actions button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1c1c1e;
+  color: rgba(235, 235, 245, 0.6);
+  transition: transform 0.14s ease-out, background 0.15s ease, color 0.15s ease;
+}
+
+.tab:hover,
+.header-actions button:hover { background: #2c2c2e; color: #fff; }
+.tab:active,
+.header-actions button:active { transform: scale(0.88); }
+.tab.on,
+.header-actions button.on { background: #fff; color: #000; }
+.header-actions { gap: 6px; padding-right: 4px; align-items: center; }
+.header-actions .plan-pills button { width: auto; border-radius: 999px; }
+
+.card {
+  border-radius: 22px;
+  background: #121214;
+  border: 0;
+}
+
+.btn {
+  height: 30px;
+  padding: 0 14px;
+  font: 600 12.5px/1 var(--font);
+}
+
+.btn.secondary { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.btn.secondary:hover { background: rgba(255, 255, 255, 0.2); }
+.btn.primary { background: #fff; color: #000; }
+
+/* Sessions: a dot in the session's colour and its name, on one line. */
+.pills { grid-auto-rows: 30px; gap: 6px; padding: 0 10px; }
+
+.pill {
+  height: 30px;
+  gap: 8px;
+  padding: 0 12px;
+  background: #1c1c1e;
+  border: 0 !important;
+}
+
+.pill .lbl {
+  position: static;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  font: 600 12px/1 var(--font);
+  color: rgba(235, 235, 245, 0.72);
+}
+
+.pill:hover { transform: scale(1.03); }
+.pill:hover .lbl { color: #fff; }
+
+.pill-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  opacity: 0.55;
+}
+
+.pill-dot.on { opacity: 1; box-shadow: 0 0 8px currentColor; animation: lv-pulse 1.4s ease-in-out infinite; }
+
+.who .name, .who-row .n { font-weight: 600; letter-spacing: -0.01em; }
+.icon-btn { width: 22px; height: 22px; background: rgba(255, 255, 255, 0.1); color: rgba(235, 235, 245, 0.7); }
+.icon-btn:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
+
+.chat-input, .wa-field {
+  border-radius: 12px;
+}
+
+/* A session's card with little to say sits in the middle of its card, level with CLOVE's mark. */
+.int-card { height: 100%; padding-top: 10px; padding-bottom: 10px; justify-content: safe center; gap: 3px; }
+.int-head b { font-size: 13.5px; letter-spacing: -0.01em; }
+.int-head > span { font-size: 12px; color: rgba(235, 235, 245, 0.56); }
+
+/* Text in a column never runs past it: it is cut with an ellipsis instead. */
+.lv-col > * { max-width: 100%; }
+.lv-scoreline > .lv-col { overflow: hidden; }
+.lv-team-score { min-width: 44px; text-align: center; }
+
+/* ── Minimal ───────────────────────────────────────────────────────────────────
+   Nothing sits in a box: the island is the only surface, and what is on it is
+   text, a glyph, or a round control. A hairline divides where a box used to. */
+
+.card { background: transparent; border-radius: 0; }
+.card.chat-card.wash::after { display: none; }
+.drop-card, .drop-card.over { background: transparent; }
+
+#header { margin-bottom: 2px; }
+.tab,
+.header-actions button { background: transparent; color: rgba(235, 235, 245, 0.45); }
+.tab:hover,
+.header-actions button:hover { background: #1c1c1e; }
+.tab.on,
+.header-actions button.on { background: #1c1c1e; color: #fff; }
+
+/* Sessions: a plain list of names, a dot each. */
+.overview { gap: 0; }
+.overview > .right { border-left: 1px solid rgba(255, 255, 255, 0.08); }
+.pills { padding: 0 6px 0 14px; gap: 2px 6px; }
+.pill { background: transparent; }
+.pill:hover { background: #1c1c1e !important; box-shadow: none !important; transform: none; }
+.jump { background: transparent; }
+
+/* Chat: the conversation, and one field. */
+.chat-body { padding: 4px 6px 4px 78px; gap: 8px; }
+.chat-bar { height: 40px; padding: 0 6px 0 16px; border-radius: 999px; background: #1c1c1e; }
+.chat-input { font-size: 13.5px; }
+.chat-input::placeholder { color: rgba(235, 235, 245, 0.35); }
+.send-btn { background: #fff; color: #000; }
+
+.mic-btn {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fb923c;
+  display: grid;
+  place-items: center;
+  cursor: default;
+  transition: transform 0.12s ease-out, background 0.15s ease;
+}
+
+.mic-btn:hover { background: rgba(251, 146, 60, 0.16); }
+.mic-btn:active { transform: scale(0.88); }
+
+.model-row { order: 3; margin: -2px 0 0; justify-content: flex-end; }
+.model-btn { background: transparent; border: 0; color: rgba(235, 235, 245, 0.45); padding: 2px 4px; }
+.model-btn:hover:not(:disabled), .model-btn.open { background: transparent; color: #fff; }
+.chat-bar { order: 2; }
+
+.chat-suggest { display: flex; gap: 6px; flex: 0 0 26px; flex-wrap: nowrap; overflow: hidden; margin-top: auto; }
+
+.chat-suggestion {
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  color: rgba(235, 235, 245, 0.7);
+  font: 500 11.5px/1 var(--font);
+  white-space: nowrap;
+  flex: 0 0 auto;
+  cursor: default;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.chat-suggestion:hover { background: #1c1c1e; color: #fff; }
+.bubble { background: #1c1c1e; border-radius: 16px; padding: 7px 12px; font-size: 13px; }
+.reply { font-size: 13.5px; line-height: 1.4; }
+.typing-row { align-items: center; gap: 8px; }
+.typing-what { font: 500 11.5px/1 var(--font); color: rgba(235, 235, 245, 0.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.typing-what:empty { display: none; }
+
+/* The launcher: a glyph in a circle and its name, nothing around them. */
+.lv-hub { padding: 12px 10px 0; }
+.lv-tiles { gap: 4px 0; align-content: center; }
+
+.lv-tile {
+  background: transparent;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 4px 0;
+  border-radius: 14px;
+}
+
+.lv-tile:hover { background: transparent; }
+
+.lv-tile-glyph {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #1c1c1e;
+  transition: background 0.15s ease, transform 0.14s ease-out;
+}
+
+.lv-tile:hover .lv-tile-glyph { background: #2c2c2e; transform: scale(1.06); }
+.lv-tile-label { font: 500 11px/1 var(--font); color: rgba(235, 235, 245, 0.6); }
+.lv-tile:hover .lv-tile-label { color: #fff; }
+
+.lv-dock-chip { background: transparent; }
+.lv-dock-chip:hover, .lv-dock-chip.on { background: #1c1c1e; }
+.lv-dock-chip.on { box-shadow: none; }
+
+/* ── Open, without the mark ─────────────────────────────────────────────────────
+   CLOVE's mark stays in the pill. The room every open view kept for it at its
+   left goes back to the content, and the views sit closer together. */
+
+.who, .plan-head { padding-left: 14px; }
+.int-card, .np-card, .plan-rows { padding-left: 14px; }
+.diff-card { padding-left: 12px; }
+.chat-body { padding-left: 6px; }
+.drop-body { padding-left: 0; align-items: center; text-align: center; }
+.recap-stack, .recap-share, .whatsnew-stack, .wardrobe-stack { padding-left: 16px; }
+.stack { padding-left: 14px !important; }
+.overview > .left { flex: 1 1 0; width: auto; min-width: 0; }
+.overview > .right { flex: 0 0 316px; }
+
+/* Widgets: what each stands for opens from its arrow; the dots in the corner choose which are here. */
+.pills { padding-right: 24px; }
+
+.pill-go {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: default;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, transform 0.12s ease-out;
+}
+
+.pill:hover .pill-go { opacity: 1; }
+.pill-go:hover { background: rgba(255, 255, 255, 0.28); }
+.pill-go:active { transform: scale(0.86); }
+.pill-logo { display: grid; place-items: center; flex: 0 0 auto; color: rgba(235, 235, 245, 0.8); }
+
+.pills-edit {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  margin-top: -10px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(235, 235, 245, 0.4);
+  display: grid;
+  place-items: center;
+  cursor: default;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pills-edit:hover { background: #1c1c1e; color: #fff; }
+
+/* ── The circle beside the pill: unread messages, and the way into the launcher ── */
+
+.live-bubble { color: rgba(235, 235, 245, 0.7); }
+.live-bubble.shown { opacity: 1; transform: scale(1); pointer-events: auto; transition: opacity 0.3s ease 0.1s, transform 0.5s cubic-bezier(0.3, 1.5, 0.4, 1) 0.1s; }
+.live-bubble:hover { color: #fff; }
+.live-bubble svg { fill: currentColor; }
+.live-bubble.unread { color: #fff; }
+.live-bubble-letter { font: 700 13px/1 var(--font); }
+
+.live-bubble-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ff453a;
+  color: #fff;
+  font: 700 10px/16px var(--font);
+  text-align: center;
+  box-shadow: 0 0 0 2px #000;
+}
+
+/* The pill's right end: a red mic while CLOVE is muted, centred in its slot (the slot's 2×2 grid would put it
+   in the top-left cell: high, and against the activity beside it). */
+#mini-grid.status { display: flex; align-items: center; justify-content: center; width: 29px; height: 29px; color: #ff453a; }
+#mini-grid.status svg { fill: currentColor; flex: none; }
+
+/* ── The bar a resting pointer opens: every page, one click away ───────────────── */
+
+#content { transition: opacity 0.2s ease-in-out; }
+
+/* ── Tasks, reminders, a day of the calendar (live/agenda.ts) ─────────────────── */
+
+.ag {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 2px 4px 0 2px;
+  font-family: var(--font);
+  color: var(--ink);
+}
+
+.ag-tabs { display: flex; gap: 6px; flex: 0 0 auto; }
+
+.ag-tab {
+  height: 24px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(235, 235, 245, 0.5);
+  font: 600 12px/1 var(--font);
+  cursor: default;
+}
+
+.ag-tab:hover { color: #fff; }
+.ag-tab.on { background: #1c1c1e; color: #fff; }
+.ag-form { display: flex; gap: 6px; flex: 0 0 auto; }
+
+.ag-input {
+  height: 30px;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  border-radius: 10px;
+  padding: 0 10px;
+  background: #1c1c1e;
+  color: #fff;
+  font: 500 12.5px/1 var(--font);
+  user-select: text;
+  cursor: text;
+}
+
+.ag-input.grow { flex: 1 1 auto; }
+.ag-input.ag-when { flex: 0 0 42%; }
+.ag-input.ag-time { flex: 0 0 62px; text-align: center; }
+.ag-input.ag-edit { flex: 1 1 auto; height: 24px; border-radius: 7px; padding: 0 7px; }
+.ag-input:focus { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.3); }
+.ag-input::placeholder { color: rgba(235, 235, 245, 0.32); }
+
+.ag-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
+
+.ag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  flex: 0 0 auto;
+  padding: 0 2px;
+  border-radius: 8px;
+}
+
+.ag-row:hover { background: rgba(255, 255, 255, 0.05); }
+.ag-text { flex: 1 1 auto; min-width: 0; font: 500 12.5px/1.2 var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+.ag-text.plain { cursor: default; }
+
+.ag-chip {
+  flex: 0 0 auto;
+  font: 600 10.5px/1 var(--font);
+  font-variant-numeric: tabular-nums;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(235, 235, 245, 0.75);
+}
+
+.ag-chip.late { background: rgba(255, 69, 58, 0.2); color: #ff6961; }
+.ag-chip.when { background: rgba(255, 159, 10, 0.18); color: #ff9f0a; }
+.ag-chip.cal { background: rgba(10, 132, 255, 0.2); color: #64b5ff; }
+
+.ag-btn {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(235, 235, 245, 0.4);
+  display: grid;
+  place-items: center;
+  cursor: default;
+}
+
+.ag-btn:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.ag-btn.tick { box-shadow: inset 0 0 0 1.5px rgba(235, 235, 245, 0.4); color: transparent; }
+.ag-btn.tick:hover { background: #30d158; box-shadow: none; color: #04200d; }
+.ag-empty { font: 500 12px/1.3 var(--font); color: rgba(235, 235, 245, 0.4); padding: 6px 2px; }
+.ag-day-head { display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto; }
+.ag-day-title { font: 600 13.5px/1 var(--font); }
+
+/* A day with something on it has a dot under its number. */
+.cal-d.busy { position: relative; }
+.cal-d.busy::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 3px; height: 3px; margin-left: -1.5px; border-radius: 50%; background: #0a84ff; }
+
+/* ── Tighter: no room left over between the parts of a page ───────────────────── */
+
+.overview > .left { flex: 0 0 236px; width: 236px; }
+.overview > .right { flex: 1 1 0; min-width: 0; }
+.int-card { padding-right: 8px; gap: 2px; }
+.int-head { padding-right: 20px; }
+.tools-view > .left { flex: 1 1 0; width: auto; }
+.tools-view > .right { flex: 1 1 0; }
+.ctl-right { gap: 8px; }
+.ctl-right .lv-status { flex: 1 1 auto; min-height: 0; }
+
+.lv-tiles { gap: 2px 0; }
+.lv-corner { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; z-index: 1; opacity: 0.6; }
+.lv-corner:hover { opacity: 1; }
+
+/* Unread messages over the launcher's tiles: an app each, a click opens its chats. */
+.lv-unread { display: flex; gap: 6px; flex: 0 0 auto; overflow: hidden; }
+
+.lv-unread-chip {
+  height: 28px;
+  padding: 0 10px 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: #1c1c1e;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 600 12px/1 var(--font);
+  cursor: default;
+  flex: 0 0 auto;
+}
+
+.lv-unread-chip:hover { background: #2c2c2e; }
+.lv-unread-chip svg { fill: currentColor; }
+.lv-unread-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #ff453a; font: 700 10.5px/18px var(--font); text-align: center; }
+
+/* The cross that takes a match off the notch: in the corner, shown on hover, clear of the team badges. */
+.lv-sports { padding-top: 20px; }
+.lv-card .lv-corner { top: 6px; right: 6px; width: 20px; height: 20px; opacity: 0; transition: opacity 0.15s ease, background 0.15s ease; }
+.lv-card:hover .lv-corner { opacity: 0.7; }
+.lv-card .lv-corner:hover { opacity: 1; }
+
+.ag-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 0 0 auto; }
+.ag-foot:empty { display: none; }
+.ag-link { border: 0; background: transparent; color: #64b5ff; font: 600 11.5px/1 var(--font); padding: 2px 0; cursor: default; }
+.ag-link:hover { color: #9fd0ff; }

@@ -527,17 +527,34 @@ export class BotEngine {
 
   /** True while anything is still moving — lets Clove Notch stop its RAF loop. */
   get busy(): boolean {
+    return this.moving || this.ambient;
+  }
+
+  /** The endless ambient loops (breathing, bouncing, z's…) and the small pill bots: they never settle. */
+  private get ambient(): boolean {
+    return this.cfg.bounces || this.cfg.scans || this.cfg.breathes || this.cfg.zz || this.cfg.sweat || this.isMini;
+  }
+
+  /**
+   * CLOVE fork: true when the only thing going on is an ambient loop, which looks the same at 20 frames a second
+   * as at 60 — so Clove Notch may draw it at a third of the cost. Anything real (a hover, an emote, a dance, a
+   * colour change, the pointer turning the head) makes this false at once.
+   */
+  get ambientOnly(): boolean {
+    return !this.moving;
+  }
+
+  /** Something other than an endless loop is moving. */
+  private get moving(): boolean {
     return (
       this.tweens.size > 0 ||
       this.particles.length > 0 ||
-      this.cfg.bounces || this.cfg.scans || this.cfg.breathes || this.cfg.zz || this.cfg.sweat ||
-      this.isMini ||
       this.isDancing || this.dancingLevel > 0.001 ||
       Math.abs(this.tgYaw - this.yaw) > 0.002 ||
       Math.abs(this.tgPitch - this.pitch) > 0.002 ||
       Math.abs(this.tgTilt - this.tilt) > 0.002 ||
-      Math.abs(this.tgSy - this.sy) > 0.002 ||
-      Math.abs(this.tgSx - this.sx) > 0.002 ||
+      // Breathing and the pill bots' idle sway move these two targets themselves: that is the loop, not news.
+      (!(this.cfg.breathes || this.isMini) && (Math.abs(this.tgSy - this.sy) > 0.002 || Math.abs(this.tgSx - this.sx) > 0.002)) ||
       Math.abs(this.tgEs - this.es) > 0.002 ||
       this.slotH > 0.001 || Math.abs(this.slotHVel) > 0.001 ||
       Math.abs(this.col[0] - this.colT[0]) > 0.003 ||

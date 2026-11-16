@@ -20,16 +20,16 @@ API = "https://api.telegram.org/bot{token}/{method}"
 OFFSET_FILE = config.STATE_DIR / "telegram_offset.txt"
 
 
-def _api(method: str, timeout: float = 40, **params) -> dict:
-    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method=method)
+def _api(method: str, timeout: float = 40, token: str = "", **params) -> dict:
+    url = API.format(token=token or config.TELEGRAM_BOT_TOKEN, method=method)
     data = urllib.parse.urlencode(params).encode() if params else None
     with urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
-def send(text: str) -> None:
+def send(text: str, token: str = "") -> None:
     for i in range(0, len(text), 4000):
-        _api("sendMessage", 20, chat_id=config.TELEGRAM_CHAT_ID, text=text[i:i + 4000])
+        _api("sendMessage", 20, token=token, chat_id=config.TELEGRAM_CHAT_ID, text=text[i:i + 4000])
 
 
 def _voice_pcm(file_id: str) -> bytes:

@@ -315,6 +315,12 @@ export const Bridge = {
 
   /** "Nobody can act on this" — Claude Code asks in the terminal right away. */
   approvalDecline: (requestId: string) => call<void>("approval_decline", { requestId }),
+  /** Tells CLOVE something as if he had said it (a banner's Reply / I'll take it / End). */
+  cloveTell: (text: string) => call<void>("clove_tell", { text }),
+  /** CLOVE's microphone from the notch: "toggle" | "on" | "off" | "status" → muted now (null: CLOVE isn't running). */
+  cloveMute: (action: "toggle" | "on" | "off" | "status") => call<boolean>("clove_mute", { action }),
+  /** CLOVE's own voice on or off ("mute audio"); true = silent. Null when CLOVE isn't running or is an older one. */
+  cloveSpeech: (action: "toggle" | "on" | "off" | "status") => call<boolean>("clove_speech", { action }),
 
   // ── Phone link (CLOVE for Android) ───────────────────────────────────────
   phoneLinkStatus: () => call<PhoneLinkStatus>("phone_link_status"),

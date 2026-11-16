@@ -107,6 +107,8 @@ export interface Settings {
   showClock: boolean;
   /** CLOVE fork: the compact island stays on screen instead of hiding after a minute. */
   keepVisible: boolean;
+  /** CLOVE fork: the compact island's width (240–520). */
+  compactWidth: number;
   absenceInterval: number;
   /** Declared pills next to the main one (at most 4), in the order they were added. */
   activeIntegrations: string[];
@@ -175,6 +177,7 @@ export const DEFAULT_SETTINGS: Settings = {
   openOnHover: false,
   showClock: false,
   keepVisible: true,
+  compactWidth: 288,
   absenceInterval: 180,
   activeIntegrations: [
     "integration_resend", "integration_n8n", "integration_vercel", "integration_github",
@@ -205,6 +208,40 @@ export const MAX_DIFFS_PER_PILL = 50;
 /** A pill's diffs are forgotten after an hour without a new one, as on macOS. */
 export const DIFF_TTL_MS = 3_600_000;
 
+/** CLOVE fork: one notification from CLOVE (hooks.ts › CloveNotification). */
+export interface CloveNotice {
+  pillId: string;
+  app: string;
+  /** message: a new message; ringing: a call is ringing; call: CLOVE is on a call; ended: a call CLOVE took is over;
+   *  replied: CLOVE answered a message for him. */
+  kind: "message" | "ringing" | "call" | "ended" | "replied";
+  sender: string;
+  text: string;
+}
+
+/** CLOVE fork: one thing CLOVE saw (a message, a call), kept for the "While you were busy" inbox. */
+export interface CloveLogItem {
+  app: string;
+  kind: CloveNotice["kind"];
+  sender: string;
+  text: string;
+  at: number;
+}
+
+/** What the inbox says: how many calls CLOVE took, missed calls, messages, replies; and the newest item. */
+export function inboxSummary(log: CloveLogItem[]): { calls: number; missed: number; messages: number; replied: number; newest: CloveLogItem | null } {
+  let calls = 0, missed = 0, messages = 0, replied = 0;
+  log.forEach((item, i) => {
+    if (item.kind === "ended") calls++;
+    else if (item.kind === "message") messages++;
+    else if (item.kind === "replied") replied++;
+    else if (item.kind === "ringing" &&
+      !log.slice(i + 1).some((x) => (x.kind === "call" || x.kind === "ended") && x.sender === item.sender)) missed++;
+  });
+  const newest = [...log].reverse().find((x) => x.kind !== "call") ?? null;
+  return { calls, missed, messages, replied, newest };
+}
+
 class AppState {
   mode: IslandMode = "hidden";
   view: IslandViewName = "overview";
@@ -232,6 +269,14 @@ class AppState {
   searchResult: SearchResult | null = null;
   chatHistory: ChatMessage[] = [];
   pendingApproval: ApprovalInfo | null = null;
+  /** CLOVE fork: the message or call the banner shows (a CloveNotification), like a phone's notification. */
+  notice: CloveNotice | null = null;
+  /** CLOVE fork: what came in since he last opened the inbox (newest last, at most 50). */
+  cloveLog: CloveLogItem[] = [];
+  /** CLOVE fork: unread messages per app ("WhatsApp" -> 3), for the header's chips. */
+  cloveUnread: Record<string, number> = {};
+  /** CLOVE fork: CLOVE isn't listening (the header's mic button); null while CLOVE isn't running. */
+  cloveMuted: boolean | null = null;
   /** The pill that was in front when the card came up; it comes back after. */
   focusBeforeApproval: string | null = null;
 
@@ -511,8 +556,13 @@ class AppState {
    * What Clove Notch opens on. A card waiting for an answer comes first, so
    * reopening a folded island shows it again (Mac #117, #290).
    */
+  /** CLOVE fork: a view that wins when Clove Notch opens (main.ts: the music player while something plays). */
+  openOn: (() => IslandViewName | null) | null = null;
+
   defaultView(): IslandViewName {
     if (this.pendingApproval) return this.pendingApproval.questions ? "question" : "approval";
+    const preferred = this.openOn?.();
+    if (preferred) return preferred;
     return this.tasks.length === 0 ? "empty" : "overview";
   }
 }

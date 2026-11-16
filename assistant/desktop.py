@@ -11,6 +11,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import config
+
 # Never run these, even with approval.
 CATASTROPHIC = re.compile(r"rm\s+-[a-z]*r[a-z]*f?[a-z]*\s+(/|~|\$HOME)/?(\s|$)|mkfs|dd\s+.*of=/dev/(sd|nvme|vd)|:\(\)\s*\{|"
                           r">\s*/dev/(sd|nvme)", re.I)
@@ -291,6 +293,9 @@ APP_ALIASES = {
 
 def open_app(name: str) -> str:
     """Launch an application by command name (code, nautilus) or display name (Postman, Spotify)."""
+    if name.lower().strip() in ("terminal", "console", "a terminal", "the terminal") and (own := _own_terminal()):
+        _detach(own)
+        return f"opened a terminal ({os.path.basename(own[0])})"
     for cmd in APP_ALIASES.get(name.lower().strip(), []):
         if shutil.which(cmd):
             _detach([cmd])
@@ -311,8 +316,36 @@ def open_app(name: str) -> str:
     return f"no app found called '{name}'"
 
 
+def _own_terminal() -> list[str] | None:
+    """His own terminal, as the desktop is set up to open it: $TERMINAL, the xdg-terminal-exec standard (what
+    Omarchy's Super+Return runs), then the common emulators. Not a look-alike of ours."""
+    named = shlex.split(os.environ.get("TERMINAL", ""))
+    if named and shutil.which(named[0]):
+        return named
+    for cmd in ("xdg-terminal-exec", "ghostty", "alacritty", "kitty", "foot", "wezterm", "ptyxis", "gnome-terminal", "konsole", "kgx"):
+        if shutil.which(cmd):
+            return [cmd]
+    return None
+
+
+def _exec_flag(term: str) -> list[str]:
+    """How each terminal is told "run this": the standard launcher and Ghostty take the command as it is."""
+    name = os.path.basename(term)
+    if name in ("xdg-terminal-exec",):
+        return []
+    if name in ("gnome-terminal", "ptyxis", "kgx", "wezterm"):
+        return ["--"] if name != "wezterm" else ["start", "--"]
+    return ["-e"]
+
+
 def run_in_terminal(command: str) -> str:
-    """Open a visible terminal window (dark theme) and run a command in it."""
+    """Open his real terminal and run a command in it; the shell stays open afterwards, as if he had typed it."""
+    own = _own_terminal()
+    if own:
+        shell = os.environ.get("SHELL") or "bash"
+        # Run it, then hand the window over to his usual interactive shell.
+        _detach(own + _exec_flag(own[0]) + ["bash", "-lc", f"{command}; exec {shlex.quote(shell)}"])
+        return f"opened a terminal running: {command}"
     term = None
     for cmd in APP_ALIASES.get("terminal", []):
         if shutil.which(cmd):
@@ -336,6 +369,53 @@ def run_in_terminal(command: str) -> str:
     return f"opened terminal running: {command}"
 
 
+def _hypr_close(address: str) -> bool:
+    """Asks Hyprland to close one window, as its close button would: Lua dispatcher (0.56+), else the classic word."""
+    run = lambda *a: subprocess.run(["hyprctl", *a], capture_output=True, text=True, timeout=3).stdout.strip()
+    if run("dispatch", f'hl.dsp.window.close({{ window = "address:{address}" }})') == "ok":
+        return True
+    return "ok" in run("dispatch", "closewindow", f"address:{address}")
+
+
+def _app_names(name: str) -> list[str]:
+    """What an app may be called by its windows and processes: the name as said, and its known commands."""
+    q = name.lower().strip()
+    names = [q] + [c.lower() for c in APP_ALIASES.get(q, [])]
+    return [re.sub(r"[\s_-]+", "", n) for n in names if n]
+
+
+def quit_app(name: str, force: bool = False) -> str:
+    """Quit an application by name: its windows are asked to close; one with no window is asked to end (or, with
+    force, killed). It goes by the app's identity (window class, process name), never by words in a window title."""
+    q = name.lower().strip()
+    if not q:
+        return "error: which app?"
+    if q in ("clove", "clove notch", "yourself", "you"):
+        return "error: I won't quit myself; say 'go to sleep', or stop the clove service"
+    names = _app_names(q)
+    closed, pids = 0, set()
+    if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") and shutil.which("hyprctl"):
+        for c in _hypr_clients():
+            ident = re.sub(r"[\s_-]+", "", f"{c.get('class', '')} {c.get('initialClass', '')}".lower())
+            if any(n in ident for n in names):
+                pids.add(int(c.get("pid") or 0))
+                if not force and _hypr_close(c["address"]):
+                    closed += 1
+    if closed:
+        return f"closed {closed} window(s) of {name}"
+    sig = "-KILL" if force else "-TERM"
+    for pid in pids - {0}:
+        subprocess.run(["kill", sig, str(pid)], capture_output=True)
+    # No window (a background app), or told to end it now: by the program's own name, this user's processes only.
+    ended = False
+    for n in names:
+        r = subprocess.run(["pkill", sig, "-i", "-u", str(os.getuid()), f"^{re.escape(n)}"], capture_output=True)
+        ended = ended or r.returncode == 0
+    if not pids and not ended:
+        return f"nothing called '{name}' is running"
+    return f"{'force-quit' if force else 'quit'} {name}"
+
+
 def open_url(url: str, new_window: bool = False) -> str:
     """Open a website in the user's Chrome (same profile as their bookmarks)."""
     url = url.strip()
@@ -351,8 +431,18 @@ def open_url(url: str, new_window: bool = False) -> str:
     return f"opened {url}"
 
 
+SEARCH_URLS = {"bing": "https://www.bing.com/search?q=", "google": "https://www.google.com/search?q=",
+               "duckduckgo": "https://duckduckgo.com/?q=", "brave": "https://search.brave.com/search?q="}
+
+
+def search_url(query: str, engine: str | None = None) -> str:
+    """The results page for `query` on his search engine (SEARCH_ENGINE in .env; Bing unless he chose another)."""
+    base = SEARCH_URLS.get((engine or config.SEARCH_ENGINE or "bing").lower(), SEARCH_URLS["bing"])
+    return base + urllib.parse.quote_plus(query)
+
+
 def web_search(query: str) -> str:
-    url = "https://www.google.com/search?q=" + urllib.parse.quote_plus(query)
+    url = search_url(query)
     _chrome_open(url, "Default", new=True)          # a search always gets its own tab
     return f"opened {url}"
 

@@ -16,6 +16,7 @@ from jobs import Job
 
 log = logging.getLogger("clove")
 DEDUPE_SECONDS = 25
+RESEND_GUARD_S = 60                  # the same message to the same chat is not sent again within this
 # A short spoken/typed answer while a plan waits for approval (checked in code, so a "yes" is never lost).
 YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|ok(ay)?|go ahead|go for it|do it|approved?|proceed|confirm(ed)?|"
                  r"please do|sounds good|alright|haan?|kar do|theek hai)\b", re.I)
@@ -53,7 +54,7 @@ DECLARATIONS = [
         ["query"]),
     _fn("find_bookmarks", "List bookmarks matching a query without opening them.", {"query": _s("STRING")}, ["query"]),
     _fn("open_url", "Open a website in Chrome.", {"url": _s("STRING"), "new_window": _s("BOOLEAN")}, ["url"]),
-    _fn("web_search", "Open a Google search in Chrome.", {"query": _s("STRING")}, ["query"]),
+    _fn("web_search", "Open a web search in Chrome (Bing, unless he chose another search engine).", {"query": _s("STRING")}, ["query"]),
     _fn("search_files", "Find files or folders in the home directory by words in their name (newest first).",
         {"query": _s("STRING"), "root": _s("STRING", "Folder to search, default ~")}, ["query"]),
     _fn("open_path", "Open a file or folder with its default app.", {"path": _s("STRING")}, ["path"]),
@@ -79,6 +80,19 @@ DECLARATIONS = [
                                                    "text": _s("STRING")}, ["action"]),
     _fn("set_reminder", "Remind the user after some minutes (you will say it out loud and show a notification).",
         {"minutes": _s("NUMBER"), "message": _s("STRING")}, ["minutes", "message"]),
+    _fn("reminder", "His reminders, kept until they are due even across restarts, and shown on Clove Notch. add: a "
+        "reminder at a moment (when: 'in 20 minutes', 'tomorrow 9am', 'friday 18:30', '2026-11-12 09:00'). list. "
+        "remove / edit: one by words of its text or its number; edit changes its text, its time, or both.",
+        {"action": _s("STRING", enum=["add", "list", "remove", "edit"]), "text": _s("STRING", "what to remind him of"),
+         "when": _s("STRING", "the moment, as he said it"), "match": _s("STRING", "remove/edit: words of it, or its number")},
+        ["action"]),
+    _fn("calendar", "His real calendar (read-only, from its iCal address). events: what is on today, tomorrow, a "
+        "weekday, a date, or this week. connect: use the https iCal address he gives. disconnect.",
+        {"action": _s("STRING", enum=["events", "connect", "disconnect"]),
+         "when": _s("STRING", "events: today | tomorrow | week | friday | 25 nov"), "url": _s("STRING")}, ["action"]),
+    _fn("quit_app", "Quit an application: closes all its windows, and ends it if it stays (force=true ends it at once). "
+        "By the app's name as he says it (Chrome, Spotify, Steam, Files).",
+        {"name": _s("STRING"), "force": _s("BOOLEAN")}, ["name"]),
     _fn("look_at_screen", "Take a screenshot of the user's screen and answer a question about it: what is on "
         "it, read an error or text, explain what a window shows. Takes a few seconds.",
         {"question": _s("STRING", "What to find out, e.g. 'what is on my screen' or 'read the error in the terminal'")}),
@@ -207,7 +221,12 @@ DECLARATIONS = [
         "TABS: open (url; REUSES a tab that already has the site, new=true only if he says 'another/new one') | new_window | "
         "close (tab = current/others/duplicates/words; all=true closes every match) | switch (next/previous/words) | navigate | "
         "back | forward | reload | pin | unpin | mute | unmute | duplicate | reopen (last closed tab) | zoom (value in/out/reset/150) "
-        "| group (name, tabs) | history (text) | bookmark (this page, or text to search bookmarks). "
+        "| group (name, tabs) | ungroup (all=true for every group) | history (text) | bookmark (this page, or text to search bookmarks). "
+        "ARRANGE: move (tab; to = left/right/first/last/new_window or words of the tab to put it next to) | merge_windows (all "
+        "tabs into this window) | sort (this window's tabs by site) | window_state (value fullscreen/maximize/minimize/normal) | "
+        "audible (which tabs are making sound) | discard (free memory: unloads background tabs, or tab=words for one). "
+        "FILES: download (url, or text = the link/picture on the page that says it; nothing = the page) -> saved in Downloads | "
+        "pdf (the page saved as a PDF in Downloads) | translate (the page into value = a language, English by default). "
         "DO: click (text or ref; nth=2 for 'the second Reply'; within='container text'; kind=button/link/checkbox…) | hover | "
         "drag (text -> to) | check (text, on=true/false for checkboxes/switches) | type (text; ALWAYS give field = the box: "
         "message/search/subject/name/its label, or ref; submit=true presses Enter; append=true keeps old text; works on dropdowns "
@@ -223,7 +242,9 @@ DECLARATIONS = [
         "action": _s("STRING", enum=["context", "tabs", "read", "text", "selected", "links", "find", "open", "new_window", "close",
                                      "switch", "navigate", "back", "forward", "reload", "pin", "unpin", "mute", "unmute",
                                      "duplicate", "reopen", "zoom", "group", "history", "bookmark", "click", "hover", "drag",
-                                     "check", "type", "clear", "fill", "key", "scroll", "wait_for", "media", "batch", "wa_chat", "wa_send"]),
+                                     "check", "type", "clear", "fill", "key", "scroll", "wait_for", "media", "batch", "wa_chat", "wa_send",
+                                     "move", "merge_windows", "sort", "ungroup", "window_state", "audible", "discard", "translate",
+                                     "download", "pdf"]),
         "url": _s("STRING"), "tab": _s("STRING", "current, others, duplicates, next, previous, or words from a tab's title/url/app"),
         "ref": _s("STRING", "Element number shown by read/context"),
         "text": _s("STRING", "Text to click/find/wait for, text to type, a history/bookmark search, or the WhatsApp message"),
@@ -233,7 +254,7 @@ DECLARATIONS = [
         "steps": _s("ARRAY", "batch: up to 12 steps run in ONE call (much faster), each a JSON string like "
                     "'{\"do\":\"click\",\"text\":\"Sign in\"}' or '{\"do\":\"type\",\"field\":\"email\",\"text\":\"x\"}'; stops at the first failure",
                     items=_s("STRING")),
-        "to": _s("STRING", "drag: text of the drop target"), "within": _s("STRING", "limit click/find to inside the container with this text"),
+        "to": _s("STRING", "drag: text of the drop target; move: left/right/first/last/new_window or words of a tab"), "within": _s("STRING", "limit click/find to inside the container with this text"),
         "kind": _s("STRING", "limit click/find to a kind: button, link, checkbox, radio, input, select, tab, menuitem…"),
         "nth": _s("INTEGER", "pick the nth match (1 = first) when several look alike"),
         "submit": _s("BOOLEAN"), "append": _s("BOOLEAN", "type: add to what is there instead of replacing"),
@@ -241,7 +262,8 @@ DECLARATIONS = [
         "on": _s("BOOLEAN", "check: true to tick, false to untick"), "gone": _s("BOOLEAN", "wait_for: wait until it disappears"),
         "all": _s("BOOLEAN", "close: close every matching tab"), "double": _s("BOOLEAN"), "right": _s("BOOLEAN"),
         "incognito": _s("BOOLEAN", "new_window: private window"), "hard": _s("BOOLEAN", "reload: bypass cache"),
-        "key": _s("STRING", "Enter, Escape, Tab, ArrowDown, ctrl+a…"), "value": _s("STRING", "zoom or media value"),
+        "key": _s("STRING", "Enter, Escape, Tab, ArrowDown, ctrl+a…"),
+        "value": _s("STRING", "zoom or media value; window_state: fullscreen/maximize/minimize/normal; translate: the language"),
         "media_action": _s("STRING", enum=["play", "pause", "toggle", "mute", "unmute", "seek", "speed", "volume", "fullscreen", "next"]),
         "offset": _s("INTEGER", "text: character offset to continue reading"), "timeout": _s("INTEGER", "wait_for: seconds"),
         "direction": _s("STRING", enum=["up", "down", "top", "bottom", "left", "right"])},
@@ -269,8 +291,10 @@ DECLARATIONS = [
         {"query": _s("STRING")}, ["query"]),
     _fn("forget", "Delete remembered notes that contain these words.", {"match": _s("STRING")}, ["match"]),
     _fn("todo", "His to-do list, kept permanently. add: put items on it (also whatever you find in Notion, mail or a page "
-        "that he wants tracked). list: read it out. done: mark one done by words or number. reopen / remove likewise.",
-        {"action": _s("STRING", enum=["add", "list", "done", "reopen", "remove"]),
+        "that he wants tracked). list: read it out. done: mark one done by words or number. reopen / remove likewise. "
+        "edit: change one's words (text) or its date (due; 'none' clears it).",
+        {"action": _s("STRING", enum=["add", "list", "done", "reopen", "remove", "edit"]),
+         "text": _s("STRING", "edit: the new words"),
          "items": _s("ARRAY", "add: the to-do texts", items=_s("STRING")),
          "match": _s("STRING", "done/reopen/remove: words of the item, or its number"),
          "source": _s("STRING", "add: where it came from, e.g. notion, gmail, voice"),
@@ -328,6 +352,18 @@ DECLARATIONS = [
     _fn("code_review", "Review the latest git diff.", {"workdir": _s("STRING")}),
     _fn("schedule_meeting", "Schedule a meeting.", {"title": _s("STRING"), "when": _s("STRING"), "attendees": _s("STRING"), "duration": _s("INTEGER")}, ["title","when"]),
     _fn("find_restaurant", "Find restaurants.", {"cuisine": _s("STRING"), "location": _s("STRING"), "prefs": _s("STRING")}),
+    _fn("notch", "Show or control a live activity on Clove Notch, the pill at the top of his screen. timer: a "
+        "countdown he can see (duration like '5m', '1h 30m', with an optional label); timer_cancel; stopwatch "
+        "(start, stop or reset); memo (start or stop a voice memo); navigate: a driving route to a place (to, and "
+        "from if he says where he starts); navigate_end; stock: watch a symbol (TSLA, RELIANCE, NIFTY, BTC) or "
+        "remove it; follow: follow a team's live score (team, and sport: cricket, soccer, basketball, tennis, "
+        "football, hockey, baseball, racing) or remove it; show: open the card of a kind (media, timer, nav, "
+        "stock, sports).", {
+            "action": _s("STRING", enum=["timer", "timer_cancel", "stopwatch", "memo", "navigate", "navigate_end",
+                                          "stock", "follow", "show"]),
+            "duration": _s("STRING"), "label": _s("STRING"), "state": _s("STRING", "start, stop or reset"),
+            "to": _s("STRING"), "from": _s("STRING"), "symbol": _s("STRING"), "team": _s("STRING"),
+            "sport": _s("STRING"), "kind": _s("STRING"), "remove": _s("BOOLEAN")}, ["action"]),
     _fn("track_package", "Track a package.", {"tracking_number": _s("STRING"), "carrier": _s("STRING")}, ["tracking_number"]),
     _fn("travel_plan", "Plan a trip.", {"destination": _s("STRING"), "dates": _s("STRING"), "budget": _s("STRING"), "prefs": _s("STRING")}, ["destination"]),
     _fn("log_habit", "Log a habit.", {"name": _s("STRING"), "note": _s("STRING")}, ["name"]),
@@ -338,6 +374,14 @@ DECLARATIONS = [
     _fn("list_scenes", "List smart home scenes."),
     _fn("explain_contract", "Explain a contract clause.", {"clause": _s("STRING")}, ["clause"]),
     _fn("weather_outfit", "Weather + outfit suggestion.", {"location": _s("STRING")}),
+    _fn("notifications", "The PC's recent notifications (messages on WhatsApp, Instagram, X, LinkedIn..., and others), "
+        "newest last. For 'what did I miss', 'any messages', 'who texted me'.", {"platform": _s("STRING", "only this app, e.g. WhatsApp")}),
+    _fn("instagram_reply", "Reply to someone who messaged him on Instagram (by their name or @username), through "
+        "Instagram's API: no browser needed. Only within 24 hours of their last message.",
+        {"who": _s("STRING", "their name or @username, as announced"), "text": _s("STRING")}, ["who", "text"]),
+    _fn("away", "He's leaving the PC (on=true: 'I'm heading out', 'I'll be away') or back (on=false). While away, "
+        "message notifications are forwarded to his Telegram. It also ends by itself when he uses the PC again.",
+        {"on": _s("BOOLEAN")}, ["on"]),
     _fn("find_jobs", "Find jobs.", {"role": _s("STRING"), "location": _s("STRING"), "skills": _s("STRING")}, ["role"]),
     _fn("cover_letter", "Draft a cover letter.", {"role": _s("STRING"), "company": _s("STRING"), "resume": _s("STRING")}, ["role","company"]),
     _fn("palace_remember", "Remember item at a location.", {"location": _s("STRING"), "item": _s("STRING")}, ["location","item"]),
@@ -448,9 +492,10 @@ LOCAL_TOOLS = {                 # tool -> parameters it keeps (None = all). Thin
     "play_youtube": ["query"], "semantic_search": ["query"],
     "code_review": ["workdir"], "schedule_meeting": ["title","when","attendees"],
     "find_restaurant": ["cuisine","location"], "track_package": ["tracking_number","carrier"],
+    "notch": None, "reminder": None, "calendar": None, "quit_app": None,
     "travel_plan": ["destination"], "log_habit": ["name","note"], "habit_status": ["name"],
     "list_habits": None, "summarize_document": ["path"], "run_scene": ["name"],
-    "list_scenes": None, "explain_contract": ["clause"], "weather_outfit": ["location"],
+    "list_scenes": None, "explain_contract": ["clause"], "weather_outfit": ["location"], "notifications": ["platform"], "away": ["on"], "instagram_reply": ["who"],
     "find_jobs": ["role","location"], "cover_letter": ["role","company"],
     "palace_remember": ["location","item"], "palace_recall": ["location"], "palace_list": None,
     "guide": None, "pair_mode": None, "answer_agent": None, "dictate": None, "type_text": None, "focus": None, "learned_shortcuts": None, "second_opinion": None,
@@ -529,7 +574,7 @@ LABELS = {"machine_overview": "Machine check", "service": "Service", "delegate_t
           "install_gnome_extension": "Install extension", "ask_gemini": "Ask Gemini", "job_status": "Check jobs",
           "update_step": "Step", "record_approval": "Approval", "cancel_job": "Cancel", "read_file": "Read",
           "write_file": "Write", "list_dir": "List", "volume": "Volume", "media": "Media", "clipboard": "Clipboard",
-          "set_reminder": "Reminder", "look_at_screen": "Looking at your screen", "point_at": "Pointing at",
+          "set_reminder": "Reminder", "notch": "Clove Notch", "reminder": "Reminder", "calendar": "Calendar", "quit_app": "Quit", "look_at_screen": "Looking at your screen", "point_at": "Pointing at",
           "clear_pointer": "Hide pointer", "deep_research": "Research", "day_status": "Today's memory",
           "day_update": "Updating today's memory", "run_routine": "Routine", "routine_reply": "Routine reply",
           "switch_brain": "Switch brain", "browser": "Chrome", "call": "Call", "delegate_to_opencode": "OpenCode", "remember": "Remember", "recall": "Recall", "todo": "To-do", "recall_research": "Recall research", "forget": "Forget"}
@@ -611,6 +656,8 @@ class Toolbox:
     def __init__(self, clove):
         self.j = clove
         self.recent: dict[str, tuple[float, str]] = {}
+        self.sends: dict[tuple, float] = {}  # (chat, text) -> when it was sent: the same message is never sent twice
+        self.wa_open = ""                    # the WhatsApp chat wa_chat last opened
         self.calls: dict[str, int] = {}      # tool+args -> times called during the current user request
         self.utterance = 0
         self.actions_since_step = 0          # real actions since the last update_step
@@ -640,6 +687,8 @@ class Toolbox:
         import deletion_guard
         if deletion_guard.is_deletion(name, a):
             return f"it deletes, stops or wipes something on {where}; read back exactly what in the plan"
+        if name == "quit_app" and a.get("force"):
+            return f"it force-quits {a.get('name')}: anything unsaved in it is lost"
         if name in ("install_packages", "install_gnome_extension"):
             return "it installs software"
         if name in ("run_command", "sudo_command") and (name == "sudo_command" or a.get("sudo")
@@ -856,6 +905,50 @@ class Toolbox:
             self.recent[key] = (now, out.label if isinstance(out, Job) else str(out))
         return out
 
+    def _notch(self, a: dict) -> str:
+        """A live activity on Clove Notch (notch.py live): the notch does the work, this only asks."""
+        notch = self.j.notch
+        if not notch.available:
+            return "error: Clove Notch isn't running"
+        act = a.get("action", "")
+        if act == "timer":
+            if not a.get("duration"):
+                return "error: say how long the timer is"
+            notch.live("timer", duration=str(a["duration"]), label=a.get("label", ""))
+            return f"timer set for {a['duration']} on Clove Notch"
+        if act == "timer_cancel":
+            notch.live("timer-cancel", label=a.get("label", ""))
+            return "timer cancelled"
+        if act == "stopwatch":
+            notch.live("stopwatch", action={"stop": "toggle", "reset": "reset"}.get(a.get("state", ""), "start"))
+            return f"stopwatch {a.get('state') or 'started'}"
+        if act == "memo":
+            stop = a.get("state") == "stop"
+            notch.live("memo", action="stop" if stop else "start")
+            return "voice memo saved to Music/Voice Memos" if stop else "recording a voice memo; say stop the memo to end it"
+        if act == "navigate":
+            if not a.get("to"):
+                return "error: say where to"
+            notch.live("navigate", to=a["to"], **({"from": a["from"]} if a.get("from") else {}))
+            return f"route to {a['to']} is on Clove Notch"
+        if act == "navigate_end":
+            notch.live("navigate-end")
+            return "navigation ended"
+        if act == "stock":
+            if not a.get("symbol"):
+                return "error: which symbol?"
+            notch.live("stock", symbol=a["symbol"], remove=bool(a.get("remove")))
+            return f"{'stopped watching' if a.get('remove') else 'watching'} {a['symbol']} on Clove Notch"
+        if act == "follow":
+            if not a.get("team"):
+                return "error: which team?"
+            notch.live("follow", team=a["team"], sport=a.get("sport", ""), remove=bool(a.get("remove")))
+            return f"{'stopped following' if a.get('remove') else 'following'} {a['team']} on Clove Notch"
+        if act == "show":
+            notch.live("show", kind=a.get("kind", ""))
+            return "shown"
+        return f"error: unknown notch action {act}"
+
     async def _browser(self, a: dict) -> str:
         from browser_bridge import bridge
         act = a.get("action", "")
@@ -868,8 +961,22 @@ class Toolbox:
             args["action"] = a.get("media_action") or a.get("action_name") or "toggle"
         if act == "group":
             args["tabs"] = a.get("tab") or a.get("text") or "current"
-        slow = act in ("batch", "open", "navigate", "reload", "wa_chat", "wa_send", "back", "forward", "wait_for", "click", "fill")
+        slow = act in ("batch", "open", "navigate", "reload", "wa_chat", "wa_send", "back", "forward", "wait_for", "click", "fill",
+                       "download", "pdf", "translate", "merge_windows", "sort")
+        send_key = None
+        if act == "wa_send" or (act == "type" and a.get("submit")):
+            send_key = (self.wa_open if act == "wa_send" else a.get("field", ""), " ".join(str(a.get("text", "")).split()))
+            when = self.sends.get(send_key)
+            if when is not None and time.monotonic() - when < RESEND_GUARD_S:
+                return (f"ALREADY SENT {int(time.monotonic() - when)}s ago: this exact message, to the same chat. "
+                        "Not sent again. Don't retry; tell him it was sent.")
         out = await bridge.call(act, timeout=50 if slow else 25, **args)
+        if act == "wa_chat" and out.startswith("opened WhatsApp chat"):
+            self.wa_open = a.get("name", "")
+        if send_key and not is_failure(out):
+            now = time.monotonic()
+            self.sends = {k: t for k, t in self.sends.items() if now - t < RESEND_GUARD_S}
+            self.sends[send_key] = now
         if out.startswith("error: the Chrome extension isn't connected"):
             from browser_bridge import SEEN
             if SEEN.exists():                     # installed, just not connected this moment: never nag about installing
@@ -998,6 +1105,28 @@ class Toolbox:
                 return "error: no plan is in memory today; only notes or new tasks can be saved"
             res = self.j.day.update(a.get("done") or [], a.get("pending") or [], a.get("add") or [], a.get("note", ""))
             return json.dumps(res) + "\n" + self.j.day.status()
+        if name == "notch":
+            return self._notch(a)
+        if name == "reminder":
+            import agenda
+            act = a.get("action", "list")
+            if act == "add":
+                return await t(agenda.reminder_add, a.get("text", ""), a.get("when", ""))
+            if act == "remove":
+                return await t(agenda.reminder_remove, a.get("match") or a.get("text", ""))
+            if act == "edit":
+                return await t(agenda.reminder_edit, a.get("match", ""), a.get("text", ""), a.get("when", ""))
+            return await t(agenda.reminder_list)
+        if name == "calendar":
+            import agenda
+            act = a.get("action", "events")
+            if act == "connect":
+                return await t(agenda.set_calendar, a.get("url", ""))
+            if act == "disconnect":
+                return await t(agenda.set_calendar, "")
+            return await t(agenda.events_text, a.get("when") or "today")
+        if name == "quit_app":
+            return await t(desktop.quit_app, a.get("name", ""), bool(a.get("force")))
         if name == "set_reminder":
             return self.j.set_reminder(float(a.get("minutes") or 0), a.get("message", ""))
         if name == "show_plan":
@@ -1050,6 +1179,9 @@ class Toolbox:
                 return await t(memory.todo_add, list(a.get("items") or []), a.get("source") or "voice", a.get("due") or "")
             if act in ("done", "reopen", "remove"):
                 return await t(memory.todo_done, a.get("match", ""), act == "reopen", act == "remove")
+            if act == "edit":
+                import agenda
+                return await t(agenda.todo_edit, a.get("match", ""), a.get("text", ""), a.get("due", ""))
             return await t(memory.todo_list, "open", a.get("when") or "all")
         if name == "delegate_to_opencode":
             task = a.get("task", "").strip()
@@ -1210,6 +1342,12 @@ class Toolbox:
         if name == "explain_contract":
             import contract_explainer
             return await contract_explainer.explain(a.get("clause",""))
+        if name == "instagram_reply":
+            return await asyncio.to_thread(self.j.instagram.reply, a.get("who", ""), a.get("text", ""))
+        if name == "away":
+            return self.j.away.set(bool(a.get("on", True)))
+        if name == "notifications":
+            return self.j.messages.listing(a.get("platform", ""))
         if name == "weather_outfit":
             import weather_outfit
             return await weather_outfit.suggest(a.get("location",""))

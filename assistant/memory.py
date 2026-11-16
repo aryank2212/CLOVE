@@ -143,10 +143,11 @@ _DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "su
 _MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
 
 
-def parse_due(text: str) -> str:
-    """'today', 'tomorrow', 'friday', 'in 3 days', 'next week', '25 oct', '2026-11-02' -> ISO date, or '' if not a date."""
+def parse_due(text: str, today: datetime.date | None = None) -> str:
+    """'today', 'tomorrow', 'friday', 'in 3 days', 'next week', '25 oct', '2026-11-02' -> ISO date, or '' if not a date.
+    `today` is the day it is counted from (the real one unless a caller says otherwise)."""
     t = (text or "").lower().strip(" .,")
-    today = datetime.date.today()
+    today = today or datetime.date.today()
     if t in ("today", "tonight", "eod", "end of day"):
         return today.isoformat()
     if t == "tomorrow":

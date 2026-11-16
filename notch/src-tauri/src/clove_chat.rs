@@ -59,6 +59,138 @@ pub async fn ask(query: &str) -> Result<String, String> {
     tokio::time::timeout(TIMEOUT, talk).await.map_err(|_| "CLOVE took too long to answer.".to_string())?
 }
 
+/// Tells CLOVE something as if he had said it ("Reply to Sam on WhatsApp", "I'll take this call"): a banner's
+/// buttons. CLOVE answers out loud, as to anything he says; only "ok" comes back here.
+#[tauri::command]
+pub async fn clove_tell(text: String) -> Result<(), String> {
+    let text = text.replace(['\n', '\r'], " ");
+    let text = text.trim();
+    if text.is_empty() || text.len() > 300 {
+        return Err("nothing to tell CLOVE".into());
+    }
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.map_err(|_| "CLOVE isn't running.".to_string())?;
+        stream.write_all(format!("ask {text}\n").as_bytes()).await.map_err(|e| e.to_string())?;
+        let mut reader = BufReader::new(stream);
+        let mut out = String::new();
+        reader.read_line(&mut out).await.map_err(|e| e.to_string())?;
+        if out.trim() == "ok" { Ok(()) } else { Err(format!("CLOVE: {}", out.trim())) }
+    };
+    tokio::time::timeout(Duration::from_secs(10), talk).await.map_err(|_| "CLOVE didn't answer.".to_string())?
+}
+
+/// The notch's sound button, for CLOVE's own voice: "toggle", "on", "off" or "status". Returns whether CLOVE is
+/// silent now (it neither speaks nor plays its sounds; it still listens and answers in writing).
+#[tauri::command]
+pub async fn clove_speech(action: String) -> Result<bool, String> {
+    let action = match action.as_str() { "toggle" | "on" | "off" => action, _ => "status".into() };
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.map_err(|_| "CLOVE isn't running.".to_string())?;
+        stream.write_all(format!("speech {action}\n").as_bytes()).await.map_err(|e| e.to_string())?;
+        let mut reader = BufReader::new(stream);
+        let mut out = String::new();
+        reader.read_line(&mut out).await.map_err(|e| e.to_string())?;
+        match out.trim() {
+            "silent" => Ok(true),
+            "speaking" => Ok(false),
+            other => Err(format!("CLOVE: {other}")),
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(5), talk).await.map_err(|_| "CLOVE didn't answer.".to_string())?
+}
+
+/// Tasks, reminders and the calendar (the notch's agenda panel): one JSON request to CLOVE, its JSON answer back.
+/// CLOVE keeps them (assistant/agenda.py), so they are the same ones it reads out and changes by voice.
+#[tauri::command]
+pub async fn clove_agenda(request: String) -> Result<String, String> {
+    // One line on the wire: a request with a line break in it would be two commands.
+    if request.len() > 4000 || request.contains(['\n', '\r']) || serde_json::from_str::<Value>(&request).is_err() {
+        return Err("not a request".into());
+    }
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.map_err(|_| "CLOVE isn't running: start it to keep tasks and reminders.".to_string())?;
+        stream.write_all(format!("agenda {request}\n").as_bytes()).await.map_err(|e| e.to_string())?;
+        let mut out = String::new();
+        BufReader::new(stream).read_line(&mut out).await.map_err(|e| e.to_string())?;
+        Ok(out.trim().to_string())
+    };
+    tokio::time::timeout(Duration::from_secs(25), talk).await.map_err(|_| "CLOVE took too long to answer.".to_string())?
+}
+
+/// The notch's mic button: "toggle", "on", "off" or "status". Returns whether CLOVE is muted now.
+#[tauri::command]
+pub async fn clove_mute(action: String) -> Result<bool, String> {
+    let action = match action.as_str() { "toggle" | "on" | "off" => action, _ => "status".into() };
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.map_err(|_| "CLOVE isn't running.".to_string())?;
+        stream.write_all(format!("mute {action}\n").as_bytes()).await.map_err(|e| e.to_string())?;
+        let mut reader = BufReader::new(stream);
+        let mut out = String::new();
+        reader.read_line(&mut out).await.map_err(|e| e.to_string())?;
+        match out.trim() {
+            "muted" => Ok(true),
+            "listening" => Ok(false),
+            other => Err(format!("CLOVE: {other}")),
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(5), talk).await.map_err(|_| "CLOVE didn't answer.".to_string())?
+}
+
+/// CLOVE fork: tells CLOVE the focus slider's mode (work | dnd | sleep | off). Returns its mode now, or None
+/// when CLOVE isn't running.
+pub async fn tell_mode(mode: &str) -> Option<String> {
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.ok()?;
+        stream.write_all(format!("mode {mode}\n").as_bytes()).await.ok()?;
+        let mut reader = BufReader::new(stream);
+        let mut out = String::new();
+        reader.read_line(&mut out).await.ok()?;
+        Some(out.trim().to_string())
+    };
+    tokio::time::timeout(Duration::from_secs(5), talk).await.ok().flatten()
+}
+
+/// Sends "quit" to the assistant's control socket and waits for its "bye". True if it took the request.
+fn ask_quit() -> bool {
+    use std::io::{Read, Write};
+    let Ok(mut s) = std::os::unix::net::UnixStream::connect(socket()) else { return false };
+    let _ = s.set_write_timeout(Some(Duration::from_secs(1)));
+    let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
+    if s.write_all(b"quit\n").is_err() {
+        return false;
+    }
+    let mut buf = [0u8; 16];
+    matches!(s.read(&mut buf), Ok(n) if n > 0 && buf.starts_with(b"bye"))
+}
+
+/// CLOVE fork: Quit means everything. Asks the assistant to end (its control socket), waits a moment for it to
+/// start, and tells systemd not to bring the login service back. Called as Clove Notch exits, so it is blocking
+/// and short.
+pub fn stop_assistant() {
+    ask_quit();
+    let _ = std::process::Command::new("systemctl")
+        .args(["--user", "stop", "--no-block", "clove.service"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
+/// A new WhatsApp message from the gateway, for CLOVE to announce, show and answer like any other message
+/// (its notifications.py). Returns whether CLOVE took it: if not (CLOVE isn't running), the notch shows its
+/// own pill as before.
+pub async fn hand_message(message: Value) -> bool {
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.ok()?;
+        stream.write_all(format!("message {message}\n").as_bytes()).await.ok()?;
+        let mut reader = BufReader::new(stream);
+        let mut out = String::new();
+        reader.read_line(&mut out).await.ok()?;
+        Some(out.trim() == "ok")
+    };
+    tokio::time::timeout(Duration::from_secs(5), talk).await.ok().flatten().unwrap_or(false)
+}
+
 pub async fn send(chat: &Chat, query: String, context: Option<ChatContext>) -> Result<ChatReply, String> {
     let turn = chat.begin(CLOVE);
     let asked = with_context(&query, context.as_ref());
@@ -66,4 +198,48 @@ pub async fn send(chat: &Chat, query: String, context: Option<ChatContext>) -> R
     chat.commit(&turn, json!({ "role": "user", "content": asked }), json!({ "role": "assistant", "content": answer }),
                 &query, &answer);
     Ok(ChatReply { text: answer })
+}
+
+/// The few one-word commands Clove Notch gives the assistant over the same socket: `wake` makes it listen now
+/// (the mic button on the notch), as saying its name does. Its one-line answer comes back.
+#[tauri::command]
+pub async fn clove_ctl(command: String) -> Result<String, String> {
+    if !matches!(command.as_str(), "wake" | "sleep" | "status" | "dictate") {
+        return Err("not a command the notch gives".into());
+    }
+    let talk = async {
+        let mut stream = UnixStream::connect(socket()).await.map_err(|_| "CLOVE isn't running.".to_string())?;
+        stream.write_all(format!("{command}\n").as_bytes()).await.map_err(|e| e.to_string())?;
+        let mut out = String::new();
+        BufReader::new(stream).read_line(&mut out).await.map_err(|e| e.to_string())?;
+        Ok(out.trim().to_string())
+    };
+    tokio::time::timeout(Duration::from_secs(6), talk).await.map_err(|_| "CLOVE took too long to answer.".to_string())?
+}
+
+#[cfg(test)]
+mod quit_tests {
+    use super::*;
+
+    #[test]
+    fn quit_is_sent_to_the_control_socket_and_answered() {
+        let dir = std::env::temp_dir().join(format!("clove-quit-{}", std::process::id()));
+        let sock_dir = dir.join("clove");
+        std::fs::create_dir_all(&sock_dir).unwrap();
+        std::env::set_var("XDG_STATE_HOME", &dir);
+        let listener = std::os::unix::net::UnixListener::bind(socket()).unwrap();
+        let server = std::thread::spawn(move || {
+            use std::io::{BufRead, Write};
+            let (mut c, _) = listener.accept().unwrap();
+            let mut line = String::new();
+            std::io::BufReader::new(c.try_clone().unwrap()).read_line(&mut line).unwrap();
+            c.write_all(b"bye\n").unwrap();
+            line
+        });
+        assert!(ask_quit());
+        assert_eq!(server.join().unwrap(), "quit\n");
+        // Nobody listening any more: not an error, just false.
+        assert!(!ask_quit());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

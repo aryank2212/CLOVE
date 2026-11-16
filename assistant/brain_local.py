@@ -537,7 +537,7 @@ class LocalBrain:
             if gen != self.voice_gen or a.mute_output:
                 continue
             pcm = await asyncio.to_thread(self.tts.synth, text)
-            if gen != self.voice_gen or a.mute_output or not pcm:
+            if gen != self.voice_gen or a.mute_output or a.muted or not pcm:
                 continue
             a.last_audio = time.monotonic() + len(pcm) / 2 / 24000
             if a.speaker:

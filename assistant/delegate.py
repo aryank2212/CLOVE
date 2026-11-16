@@ -32,6 +32,25 @@ def claude_bin() -> str:
         p = str(cands[0]) if cands else None
     if not p:
         raise RuntimeError("claude CLI not found; set CLAUDE_BIN in .env")
+    return _past_mise_wrapper(p)
+
+
+def _past_mise_wrapper(p: str) -> str:
+    """A mise wrapper script (`mise use -g claude` then `mise x claude`) asks mise's registry on every call and can
+    hang for minutes offline or when the registry is slow: run the binary mise already installed instead."""
+    try:
+        if os.path.getsize(p) > 4096:
+            return p
+        text = Path(p).read_text(errors="ignore")
+    except OSError:
+        return p
+    if "mise" not in text:
+        return p
+    for c in (Path.home() / ".local/share/mise/installs/claude/latest/claude",
+              *sorted(Path.home().glob(".local/share/mise/installs/claude/*/claude"),
+                      key=lambda c: c.stat().st_mtime, reverse=True)):
+        if c.is_file() and os.access(c, os.X_OK):
+            return str(c)
     return p
 
 

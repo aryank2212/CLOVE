@@ -987,13 +987,13 @@ function generalSection(): HTMLElement {
       toggle(settings.soundEnabled, (v) => { settings.soundEnabled = v; void save(); }),
       volume,
     ),
-    h("div", { class: "row" }, soundsFolder, reloadSounds, customCount),
+    h("div", { class: "row" }, h("label", {}), customCount, soundsFolder, reloadSounds),
     h("div", { class: "hint", text: t("Drop a file named like one of CLOVE's sounds (finish.wav, approval.mp3, greet.m4a…) in the sounds folder to replace it, then Reload.") }),
     h("div", { class: "row" },
       h("label", { text: t("Open on hover") }),
       toggle(settings.openOnHover, (v) => { settings.openOnHover = v; void save(); }),
     ),
-    h("div", { class: "hint", text: t("Hovering Clove Notch opens it; it folds again shortly after the pointer leaves. Click inside to keep it open.") }),
+    h("div", { class: "hint", text: t("Resting the pointer on Clove Notch opens a bar with its pages; it folds again when the pointer leaves. Click inside to keep it open.") }),
     h("div", { class: "row" },
       h("label", { text: t("Show clock in Clove Notch") }),
       toggle(settings.showClock, (v) => { settings.showClock = v; void save(); }),
@@ -1004,6 +1004,8 @@ function generalSection(): HTMLElement {
       toggle(settings.keepVisible !== false, (v) => { settings.keepVisible = v; void save(); }),
     ),
     h("div", { class: "hint", text: "On: Clove Notch always stays at the top of the screen, folded small. Off: it hides after a minute of quiet, and comes back when you point at the top of the screen. Pause hides it either way." }),
+    compactWidthRow(),
+    h("div", { class: "hint", text: t("The widest Clove Notch grows when folded small, to make room for a song, a timer or a score.") }),
     h("div", { class: "row" },
       h("label", { text: t("Auto-close") }),
       autoClose,
@@ -1284,20 +1286,10 @@ function recapRows(): HTMLElement[] {
     },
   }) as HTMLButtonElement;
   return [
-    h("div", { class: "row" },
-      h("label", { text: T.label }),
-      sw,
-      h("span", { class: "hint", text: T.keep }),
-    ),
-    h("div", { class: "row" },
-      h("label", {}),
-      clearBtn,
-      feedback,
-    ),
-    h("div", { class: "row" },
-      h("label", {}),
-      h("span", { class: "hint", style: "flex:1 1 0;min-width:0", text: T.about }),
-    ),
+    h("div", { class: "row" }, h("label", { text: T.label }), sw),
+    h("div", { class: "hint", text: T.keep }),
+    h("div", { class: "row" }, h("label", {}), feedback, clearBtn),
+    h("div", { class: "hint", text: T.about }),
   ];
 }
 
@@ -1421,3 +1413,22 @@ async function render() {
 }
 
 void main();
+
+
+/** CLOVE fork: the compact island's width: a slider, applied live while dragging, saved when let go. */
+function compactWidthRow(): HTMLElement {
+  const value = h("span", { class: "hint" });
+  const show = (w: number) => { value.textContent = `${Math.round(w)} px`; };
+  const input = h("input", { type: "range", min: "240", max: "520", step: "8" }) as HTMLInputElement;
+  input.value = String(settings.compactWidth ?? 288);
+  show(Number(input.value));
+  let timer: number | null = null;
+  input.addEventListener("input", () => {
+    show(Number(input.value));
+    settings.compactWidth = Number(input.value);
+    // Saved a moment after the slider stops moving, so Clove Notch follows without a write per pixel.
+    if (timer != null) window.clearTimeout(timer);
+    timer = window.setTimeout(() => void save(), 60);
+  });
+  return h("div", { class: "row" }, h("label", { text: t("Compact width") }), input, value);
+}

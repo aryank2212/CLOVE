@@ -31,7 +31,25 @@ async def main() -> int:
         await asyncio.sleep(0.8)
         out = await bb.bridge.call("call_state")
         task.cancel()
+    # The same old build reconnecting (its reload didn't help) is not asked again: no reload loop.
+    async with websockets.connect(f"ws://127.0.0.1:{config.BRIDGE_PORT}", origin=bb.ORIGIN) as ws:
+        await ws.send(json.dumps({"hello": "clove-hands", "version": "3.1.0"}))
+        try:
+            again = await asyncio.wait_for(ws.recv(), 0.6)
+        except asyncio.TimeoutError:
+            again = None
+    # A newer build than the files on disk (loaded from another folder) is left alone.
+    async with websockets.connect(f"ws://127.0.0.1:{config.BRIDGE_PORT}", origin=bb.ORIGIN) as ws:
+        await ws.send(json.dumps({"hello": "clove-hands", "version": "99.0.0"}))
+        try:
+            newer = await asyncio.wait_for(ws.recv(), 0.6)
+        except asyncio.TimeoutError:
+            newer = None
+        newer_stale = bb.bridge.stale
     ok = [("asked to reload itself first", cmds[:1] == ["self_reload"]),
+          ("asked once, not again on reconnect", again is None),
+          ("a newer extension is not reloaded", newer is None and not newer_stale),
+          ("versions compare as numbers", bb.version_key("3.10.0") > bb.version_key("3.9.9")),
           ("remembered as installed", bb.SEEN.exists()),
           ("still old -> user told", bool(seen) and seen[0][0] == "3.1.0"), ("error says to reload", "reload" in out and "out of date" in out),
           ("names both versions", "3.1.0" in out and bb.wanted_version() in out)]

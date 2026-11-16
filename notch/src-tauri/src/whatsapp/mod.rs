@@ -727,7 +727,7 @@ async fn register_webhook(provider: &Provider, gen: u64) {
 }
 
 fn received(gen: u64, kind: Kind, body: &[u8]) {
-    let (fresh, groups) = {
+    let (fresh, groups, new_messages) = {
         let mut c = ctl();
         if c.generation != gen || c.provider.is_none() {
             return;
@@ -740,7 +740,7 @@ fn received(gen: u64, kind: Kind, body: &[u8]) {
         let Some(WebhookEvent::Message(message)) = gateway::parse_webhook(kind, body, me.as_deref()) else { return };
         ingest(&mut c, vec![message])
     };
-    after_ingest(gen, fresh, groups);
+    after_ingest(gen, fresh, groups, new_messages);
 }
 
 // ── Messages ──────────────────────────────────────────────────────────────────
@@ -783,7 +783,7 @@ fn poll() {
     spawn(async move {
         let started = gateway::now_ms();
         let result = provider.recent_messages(since, me.as_deref()).await;
-        let (fresh, groups) = {
+        let (fresh, groups, new_messages) = {
             let mut c = ctl();
             if c.generation != gen {
                 return;
@@ -793,18 +793,44 @@ fn poll() {
             c.last_poll_ms = started;
             ingest(&mut c, messages)
         };
-        after_ingest(gen, fresh, groups);
+        after_ingest(gen, fresh, groups, new_messages);
     });
 }
 
-/// Adds what arrived. Returns the conversation to announce (its name), and the groups to name.
-fn ingest(c: &mut Ctl, messages: Vec<Message>) -> (Option<String>, Vec<String>) {
+/// CLOVE fork: one new message, as CLOVE gets it (clove_chat::hand_message).
+struct Fresh {
+    key: String,
+    sender_name: String,
+    sender: String,
+    text: String,
+}
+
+fn media_word(m: &model::Media) -> &'static str {
+    match m {
+        model::Media::None => "",
+        model::Media::Image => "a photo",
+        model::Media::Video => "a video",
+        model::Media::Audio { .. } => "an audio",
+        model::Media::Voice { .. } => "a voice message",
+        model::Media::Document { .. } => "a document",
+        model::Media::Sticker => "a sticker",
+        model::Media::Location => "a location",
+        _ => "an attachment",
+    }
+}
+
+/// Adds what arrived. Returns the conversation to announce (its name), the groups to name, and (CLOVE fork) each
+/// new message for CLOVE.
+fn ingest(c: &mut Ctl, messages: Vec<Message>) -> (Option<String>, Vec<String>, Vec<Fresh>) {
     let filters = c.filters();
     let mut fresh: Option<String> = None;
     let mut groups = Vec::new();
+    let mut new_messages = Vec::new();
     for message in messages {
         let key = model::normalized(&message.chat);
         let from_me = message.from_me;
+        let text = if message.text.trim().is_empty() { format!("sent {}", media_word(&message.media)) } else { message.text.clone() };
+        let item = Fresh { key: key.clone(), sender_name: message.sender_name.clone(), sender: message.sender.clone(), text };
         let outcome = c.inbox.add(message, &filters, None, false);
         if let Some(g) = needs_name(c, &key) {
             groups.push(g);
@@ -817,15 +843,43 @@ fn ingest(c: &mut Ctl, messages: Vec<Message>) -> (Option<String>, Vec<String>) 
         }
         if outcome == Outcome::Notify && !from_me {
             fresh = Some(key);
+            new_messages.push(item);
         }
     }
     let name = fresh.map(|key| c.inbox.conversations.get(&key).map(|conv| conv.name.clone()).unwrap_or_else(|| model::display_number(&key)));
-    (name, groups)
+    // The chat's name as WhatsApp shows it, now that the inbox knows it.
+    for m in &mut new_messages {
+        let chat = c.inbox.conversations.get(&m.key).map(|conv| conv.name.clone()).unwrap_or_default();
+        if !chat.is_empty() && !m.key.ends_with("@g.us") {
+            m.sender_name = chat;
+        } else if m.key.ends_with("@g.us") {
+            m.text = format!("{} (in {}): {}", if m.sender_name.is_empty() { model::display_number(&m.sender) } else { m.sender_name.clone() },
+                             if chat.is_empty() { "a group".into() } else { chat }, m.text);
+        }
+    }
+    (name, groups, new_messages)
 }
 
-fn after_ingest(gen: u64, fresh: Option<String>, groups: Vec<String>) {
+fn after_ingest(gen: u64, fresh: Option<String>, groups: Vec<String>, new_messages: Vec<Fresh>) {
     if let Some(name) = fresh {
-        pill(PillEvent::Message { name });
+        // CLOVE fork: CLOVE announces, shows and can answer it (with who and what); if CLOVE isn't running, the
+        // pill lights with the conversation's name as before.
+        let items: Vec<serde_json::Value> = new_messages.into_iter().map(|m| serde_json::json!({
+            "app": "WhatsApp",
+            "sender": if m.sender_name.is_empty() { model::display_number(&m.key) } else { m.sender_name },
+            "number": model::display_number(if m.key.ends_with("@g.us") { &m.sender } else { &m.key }),
+            "group": m.key.ends_with("@g.us"),
+            "text": m.text,
+        })).collect();
+        spawn(async move {
+            let mut taken = !items.is_empty();
+            for item in items {
+                taken &= crate::clove_chat::hand_message(item).await;
+            }
+            if !taken {
+                pill(PillEvent::Message { name });
+            }
+        });
     }
     if let Some(provider) = ctl().provider.clone() {
         name_groups(provider, gen, groups);
@@ -1242,23 +1296,23 @@ mod tests {
         let mut c = fresh_ctl();
         let mut m = msg("1", "33612345678@s.whatsapp.net", "secret text");
         m.sender_name = "Marie".into();
-        let (fresh, groups) = ingest(&mut c, vec![m]);
+        let (fresh, groups, _) = ingest(&mut c, vec![m]);
         assert_eq!(fresh.as_deref(), Some("Marie"));
         assert!(groups.is_empty());
         // Open on screen: seen, not unread, not announced.
         c.open_chat = Some("33612345678@s.whatsapp.net".into());
-        let (fresh, _) = ingest(&mut c, vec![msg("2", "33612345678@c.us", "again")]);
+        let (fresh, _, _) = ingest(&mut c, vec![msg("2", "33612345678@c.us", "again")]);
         assert_eq!(fresh, None);
         assert_eq!(c.inbox.conversations["33612345678@s.whatsapp.net"].unread, 0, "read on screen");
         assert_eq!(c.inbox.conversations["33612345678@s.whatsapp.net"].messages.len(), 2);
         c.open_chat = None;
-        let (fresh, _) = ingest(&mut c, vec![msg("2b", "33612345678@s.whatsapp.net", "and again")]);
+        let (fresh, _, _) = ingest(&mut c, vec![msg("2b", "33612345678@s.whatsapp.net", "and again")]);
         assert_eq!(fresh.as_deref(), Some("Marie"), "the person still names the chat");
         // A muted group without a mention stays quiet, but is asked its name once.
-        let (fresh, groups) = ingest(&mut c, vec![msg("3", "120363@g.us", "hi all")]);
+        let (fresh, groups, _) = ingest(&mut c, vec![msg("3", "120363@g.us", "hi all")]);
         assert_eq!(fresh, None);
         assert_eq!(groups, ["120363@g.us"]);
-        let (_, groups) = ingest(&mut c, vec![msg("4", "120363@g.us", "hi again")]);
+        let (_, groups, _) = ingest(&mut c, vec![msg("4", "120363@g.us", "hi again")]);
         assert!(groups.is_empty(), "asked once");
         // Clove Notch only sees the visible conversations.
         let view = c.island_view();
@@ -1266,7 +1320,7 @@ mod tests {
         assert_eq!(view.unread, 1);
         // Ignored: never shown again.
         c.prefs.ignored = vec!["33612345678@s.whatsapp.net".into()];
-        let (fresh, _) = ingest(&mut c, vec![msg("5", "33612345678@s.whatsapp.net", "x")]);
+        let (fresh, _, _) = ingest(&mut c, vec![msg("5", "33612345678@s.whatsapp.net", "x")]);
         assert_eq!(fresh, None);
         assert!(c.island_view().conversations.is_empty());
     }
@@ -1280,6 +1334,19 @@ mod tests {
         assert_eq!((c.failures, c.down), (1, false));
         apply(&mut c, WaError::Refused("NOPE".into()));
         assert_eq!((c.link.clone(), c.failures, c.down), (LinkState::Failed { detail: "NOPE".into() }, 2, true));
+    }
+
+    #[test]
+    fn new_messages_go_to_clove_with_who_and_what() {
+        let mut c = fresh_ctl();
+        let mut photo = msg("p", "919876543210@s.whatsapp.net", "");
+        photo.media = model::Media::Image;
+        let (_, _, fresh) = ingest(&mut c, vec![msg("a", "919876543210@s.whatsapp.net", "are you free?"), photo]);
+        assert_eq!(fresh.len(), 2);
+        assert_eq!(fresh[0].text, "are you free?");
+        assert_eq!(fresh[1].text, "sent a photo", "a photo without a caption still says what came");
+        let (_, _, mine) = ingest(&mut c, vec![{ let mut m = msg("b", "919876543210@s.whatsapp.net", "sent by me"); m.from_me = true; m }]);
+        assert!(mine.is_empty(), "his own messages are not announced");
     }
 
     #[test]

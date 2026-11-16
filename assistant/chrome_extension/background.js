@@ -154,6 +154,23 @@ async function pickTab(m) {
 }
 const brief = (t) => `[${t.id}] ${t.active ? "* " : ""}${t.pinned ? "(pinned) " : ""}${t.audible ? "(playing sound) " : ""}${(t.title || "").slice(0, 60)} - ${(t.url || "").slice(0, 80)}`;
 const normUrl = (u) => (!u ? undefined : /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : "https://" + u);
+const LANGS = { english: "en", hindi: "hi", french: "fr", spanish: "es", german: "de", italian: "it", portuguese: "pt", russian: "ru",
+  japanese: "ja", korean: "ko", chinese: "zh-CN", arabic: "ar", bengali: "bn", bangla: "bn", tamil: "ta", telugu: "te", marathi: "mr",
+  gujarati: "gu", punjabi: "pa", urdu: "ur", kannada: "kn", malayalam: "ml", turkish: "tr", dutch: "nl", indonesian: "id" };
+const langCode = (v) => { const s = String(v || "en").trim().toLowerCase(); return LANGS[s] || (/^[a-z]{2}(-[a-z]{2})?$/i.test(s) ? s : "en"); };
+// A download, followed until it is finished (or for `ms`): where it was saved, or why it stopped.
+async function downloadDone(id, ms) {
+  const t0 = Date.now();
+  for (;;) {
+    const [d] = await chrome.downloads.search({ id });
+    if (!d) throw new Error("the download disappeared");
+    const name = (d.filename || "").split("/").pop() || d.url.split("/").pop();
+    if (d.state === "complete") return `saved to Downloads: ${name}`;
+    if (d.state === "interrupted") throw new Error(`the download stopped (${d.error || "interrupted"})`);
+    if (Date.now() - t0 > ms) return `downloading ${name} (still going; it lands in Downloads)`;
+    await sleep(300);
+  }
+}
 const whereNow = async (tab) => { const t = await chrome.tabs.get(tab.id); return `${(t.title || "").slice(0, 50)} - ${(t.url || "").slice(0, 70)}`; };
 
 async function waitLoaded(tabId, ms = 8000) {
@@ -227,7 +244,15 @@ async function runOne(tab, frameId, name, args) {
     throw e;
   } finally { off(); }
 }
+// A tab unloaded to free memory has no page to work in: load it again first.
+async function awake(tab) {
+  if (!tab.discarded) return tab;
+  await chrome.tabs.reload(tab.id);
+  await waitLoaded(tab.id, 10000);
+  return await chrome.tabs.get(tab.id);
+}
 async function inPage(tab, name, args = []) {
+  tab = await awake(tab);
   const url = tab.url || "";
   if (/^(chrome|edge|about|chrome-extension|devtools|view-source):/.test(url) || /chromewebstore\.google\.com|chrome\.google\.com\/webstore/.test(url))
     throw new Error("that is a browser page, which extensions can't control");
@@ -646,6 +671,125 @@ async function run(m) {
         await sleep(1000);
       }
       throw new Error(last);
+    }
+    // ------------------------------------------------ arranging tabs and windows
+    case "move": {         // a tab: left/right/first/last, into a new window, or next to another tab (to = words of it)
+      const t = await pickTab(m);
+      const where = String(m.to || m.value || "new_window").toLowerCase().trim();
+      const name = appOf(t.url) || (t.title || "").slice(0, 40);
+      if (/^(new[ _]?)?window$/.test(where)) {
+        await chrome.windows.create({ tabId: t.id, focused: true });
+        return `moved ${name} into a new window`;
+      }
+      const pos = { first: 0, start: 0, last: -1, end: -1, left: Math.max(0, t.index - 1), right: t.index + 1 }[where];
+      if (pos !== undefined) {
+        await chrome.tabs.move(t.id, { index: pos });
+        const now = await chrome.tabs.get(t.id);
+        const count = (await chrome.tabs.query({ windowId: now.windowId })).length;
+        return `moved ${name} to place ${now.index + 1} of ${count}`;
+      }
+      const other = await pickTab({ tab: m.to });
+      if (other.id === t.id) throw new Error("that is the same tab");
+      if (other.incognito !== t.incognito) throw new Error("a private tab and a normal one can't share a window");
+      await chrome.tabs.move(t.id, { windowId: other.windowId, index: other.index + 1 });
+      await focusTab(t);
+      return `moved ${name} next to ${appOf(other.url) || other.title}`;
+    }
+    case "merge_windows": {  // every tab of every other window into this one
+      const here = await activeTab();
+      const tabs = (await chrome.tabs.query({ windowType: "normal" })).filter((t) => t.windowId !== here.windowId && t.incognito === here.incognito);
+      if (!tabs.length) return "the tabs are already all in one window";
+      let moved = 0;
+      for (const t of tabs) { try { await chrome.tabs.move(t.id, { windowId: here.windowId, index: -1 }); moved++; } catch { /* a tab that can't move */ } }
+      return `moved ${moved} tab(s) into this window`;
+    }
+    case "sort": {         // this window's loose tabs by site; pinned and grouped tabs stay where they are
+      const win = (await activeTab()).windowId;
+      const tabs = (await chrome.tabs.query({ windowId: win })).filter((t) => !t.pinned && t.groupId === -1);
+      const sorted = [...tabs].sort((a, b) => (hostOf(a.url) || "~").localeCompare(hostOf(b.url) || "~") || a.index - b.index);
+      for (const t of sorted) await chrome.tabs.move(t.id, { index: -1 });
+      return `sorted ${sorted.length} tab(s) by site`;
+    }
+    case "ungroup": {
+      const ids = m.all ? (await chrome.tabs.query({})).filter((t) => t.groupId !== -1).map((t) => t.id) : [(await pickTab(m)).id];
+      if (!ids.length) return "no tab is in a group";
+      await chrome.tabs.ungroup(ids);
+      return `took ${ids.length} tab(s) out of their group`;
+    }
+    case "window_state": {   // the browser window: fullscreen, maximize, minimize, normal
+      const t = await activeTab();
+      const state = { fullscreen: "fullscreen", maximize: "maximized", maximized: "maximized", minimize: "minimized", minimized: "minimized",
+        normal: "normal", restore: "normal", exit: "normal" }[String(m.value || "maximize").toLowerCase()];
+      if (!state) throw new Error("window_state takes value fullscreen, maximize, minimize or normal");
+      await chrome.windows.update(t.windowId, { state });
+      return `the window is ${state}`;
+    }
+    case "audible": {      // which tabs are making sound
+      const all = await chrome.tabs.query({});
+      const sounding = all.filter((t) => t.audible);
+      const muted = all.filter((t) => t.mutedInfo && t.mutedInfo.muted);
+      const list = sounding.map((t) => brief(t) + (t.mutedInfo && t.mutedInfo.muted ? " (muted)" : "")).join("\n");
+      return (list || "no tab is playing sound") + (muted.length ? `\nmuted tabs: ${muted.map((t) => appOf(t.url) || t.title).join(", ")}` : "");
+    }
+    case "discard": {      // free memory: unload background tabs; they come back as they were when opened
+      if (m.tab && !/^(others|all|background)$/i.test(String(m.tab))) {
+        const t = await pickTab(m);
+        if (t.active) throw new Error("the tab on screen can't be unloaded");
+        await chrome.tabs.discard(t.id);
+        return "unloaded " + brief(t);
+      }
+      const tabs = (await chrome.tabs.query({ active: false, audible: false, discarded: false }))
+        .filter((t) => !t.pinned && t.autoDiscardable !== false && /^https?:/.test(t.url || ""));
+      let n = 0;
+      for (const t of tabs) { try { await chrome.tabs.discard(t.id); n++; } catch { /* not discardable */ } }
+      return `unloaded ${n} background tab(s) to free memory; each comes back when you open it`;
+    }
+    case "translate": {    // the page through Google Translate (value: language, English by default)
+      const t = await pickTab(m);
+      if (!/^https?:/.test(t.url || "")) throw new Error("only web pages can be translated");
+      const lang = langCode(m.value || m.text);
+      await chrome.tabs.update(t.id, { url: `https://translate.google.com/translate?sl=auto&tl=${lang}&u=${encodeURIComponent(t.url)}` });
+      await ready(t);
+      return `translated into ${lang}: ` + await whereNow(t);
+    }
+    // ------------------------------------------------ files
+    case "download": {     // a file: the address given, the link or picture on the page that says `text`, or the page
+      let url = m.url ? normUrl(m.url) : "";
+      if (!url && m.text) {
+        const t = await awake(await pickTab(m));
+        const [r] = await chrome.scripting.executeScript({
+          target: { tabId: t.id }, args: [String(m.text)],
+          func: (q) => {
+            const low = (s) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+            const want = low(q);
+            const items = [...document.querySelectorAll("a[href], img[src], video[src], audio[src], source[src]")];
+            const label = (e) => low(e.innerText || e.getAttribute("aria-label") || e.title || e.alt || e.getAttribute("download") || "");
+            const hit = items.find((e) => label(e) === want) || items.find((e) => label(e).includes(want)) ||
+              items.find((e) => (e.href || e.currentSrc || e.src || "").toLowerCase().includes(want));
+            return hit ? hit.href || hit.currentSrc || hit.src : null;
+          },
+        });
+        url = r && r.result;
+        if (!url) throw new Error(`no link or picture saying "${m.text}" on the page`);
+      }
+      if (!url) url = (await pickTab(m)).url;
+      if (!/^(https?|data):/i.test(url)) throw new Error("only web addresses can be downloaded");
+      const id = await chrome.downloads.download({ url, conflictAction: "uniquify" });
+      return await downloadDone(id, 30000);
+    }
+    case "pdf": {          // the page saved as a PDF in Downloads
+      const t = await awake(await pickTab(m));
+      if (!/^(https?|file):/.test(t.url || "")) throw new Error("only web pages can be saved as PDF");
+      let data;
+      try { data = (await withDebugger(t.id, (send) => send("Page.printToPDF", { printBackground: true }))).data; }
+      catch {
+        // This Chrome can't print to a file by itself: its print dialog, where "Save as PDF" is one click.
+        await chrome.scripting.executeScript({ target: { tabId: t.id }, func: () => { setTimeout(() => window.print(), 50); } });
+        return "opened the print dialog: choose “Save as PDF” there";
+      }
+      const name = (t.title || hostOf(t.url) || "page").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "page";
+      const id = await chrome.downloads.download({ url: "data:application/pdf;base64," + data, filename: `${name}.pdf`, conflictAction: "uniquify" });
+      return await downloadDone(id, 20000);
     }
     case "wait": await sleep(Math.min(m.ms || 1000, 10000)); return "waited";
     default: throw new Error("unknown command " + m.cmd);

@@ -99,6 +99,12 @@ class Notch:
             self._enqueue(self._payload(event, **fields))
 
     # ---- what Clove reports ------------------------------------------------------------------------
+    def notice(self, app: str, kind: str, sender: str, text: str = ""):
+        """A message or call for Clove Notch to show like a phone's notification, on the app's own pill.
+        kind: message | ringing | call | ended | replied."""
+        slug = "app-" + "".join(ch for ch in app.lower() if ch.isalnum())[:18]
+        self.event("CloveNotification", clove_agent=slug, kind=kind, sender=sender[:80], text=text[:300])
+
     def prompt(self, text: str):
         self.event("UserPromptSubmit", prompt=text[:300])
 
@@ -116,6 +122,28 @@ class Notch:
             self.event("Stop", last_assistant_message=f"{label[:80]}: {result.splitlines()[0][:200] if result else 'done'}")
         else:
             self.event("StopFailure", message=f"{label[:80]} failed")
+
+    # ---- live activities (notch/src/core/live.ts) ---------------------------------------------------
+    def live(self, op: str, **fields):
+        """Show something live on Clove Notch: a timer, a route, a stock, the voice conversation. One JSON line
+        `{"live": {"op": …}}` on the same socket; fire and forget."""
+        if self.available:
+            if self.queue is None:
+                self.queue = asyncio.Queue()
+            if self.worker is None or self.worker.done():
+                self.worker = asyncio.ensure_future(self._drain())
+            self.queue.put_nowait(({"live": {"op": op, **fields}}, None))
+
+    def voice(self, phase: str, heard: str = "", reply: str = ""):
+        """Where the spoken conversation is: listening, thinking, working, speaking, or idle (over)."""
+        state = (phase, heard, reply)
+        if state == getattr(self, "_voice", None):
+            return
+        self._voice = state
+        fields = {"phase": phase}
+        if phase != "idle":
+            fields.update(heard=heard[:200], reply=reply[:300])
+        self.live("voice", **fields)
 
     # ---- approvals ---------------------------------------------------------------------------------
     def ask_approval(self, plan: dict):

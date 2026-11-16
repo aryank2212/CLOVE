@@ -97,7 +97,18 @@ async def main():
     await asyncio.sleep(0.2)
     check("answering elsewhere withdraws the card", [e["hook_event_name"] for e in got] == ["PermissionRequest", "Interrupt"])
     check("...and Clove Notch can no longer decide", not calls3["approval"])
+    # messages and calls, like a phone's notifications, each on its app's own pill
+    got.clear()
+    isl.notice("WhatsApp", "message", "Sam", "are you free tonight?")
+    isl.notice("Phone", "ringing", "+911234567890")
+    isl.notice("X", "replied", "Priya", "Hi, this is CLOVE.")
+    await asyncio.sleep(0.2)
+    note = [e for e in got if e["hook_event_name"] == "CloveNotification"]
+    check("messages and calls go to the notch", len(note) == 3, got)
+    check("on the app's own pill", [e["clove_agent"] for e in note] == ["app-whatsapp", "app-phone", "app-x"], note)
+    check("with who and what", note[0]["sender"] == "Sam" and note[0]["text"] == "are you free tonight?" and note[1]["kind"] == "ringing")
     server.close()
+
 
 
 asyncio.run(main())
