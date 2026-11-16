@@ -384,8 +384,9 @@ class Assistant:
             self.set_muted(True)
         elif old == "sleep" and self._mode_muted:
             self._mode_muted = False
-            self.set_muted(False)                      # tells what was held, if anything
-        if mode in ("off", "work") and old == "dnd" and self.held_notes and not self.muted:
+            self.set_muted(False)
+        # Out of Do Not Disturb or Sleep: one summary of what was held (if his voice is on; else it waits for the voice).
+        if mode in ("off", "work") and old in ("dnd", "sleep") and self.held_notes and not self.silent:
             notes, self.held_notes = self.held_notes, []
             asyncio.get_running_loop().create_task(self.notify(held_summary(notes)))
         return mode

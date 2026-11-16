@@ -25,7 +25,7 @@ class Brain:
         told.append(note)
 
 
-a = SimpleNamespace(muted=False, mode="off", _mode_muted=False, held_notes=[], pending_notes=[], brain=Brain(),
+a = SimpleNamespace(muted=False, silent=False, mode="off", _mode_muted=False, held_notes=[], pending_notes=[], brain=Brain(),
                     connected=True, ui=SimpleNamespace(send=lambda **k: None),
                     notch=SimpleNamespace(event=lambda *x, **k: None), speaker=SimpleNamespace(clear=lambda: None),
                     focus=SimpleNamespace(active=False))

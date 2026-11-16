@@ -83,7 +83,7 @@ def parse_when(text: str, now: datetime.datetime | None = None) -> float | None:
     for cut in range(len(words), -1, -1):
         head, tail = " ".join(words[:cut]), " ".join(words[cut:])
         for d_text, c_text in ((head, tail), (tail, head)):
-            d = memory.parse_due(d_text) if d_text else ""
+            d = memory.parse_due(d_text, now.date()) if d_text else ""
             c = _clock(c_text) if c_text else None
             if (d or not d_text) and (c or not c_text) and (d or c):
                 day, clock = d, c

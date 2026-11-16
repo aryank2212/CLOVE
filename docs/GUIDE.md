@@ -362,6 +362,25 @@ sender's name and @username, and can reply, with no browser and no password (`as
 
 Replies work within 24 hours of their last message. The token lasts 60 days; CLOVE renews it every few weeks.
 
+## If CLOVE won't start
+
+Look at `journalctl --user -u clove -n 30`. If it says `No module named 'dotenv'` (or another package), CLOVE's Python
+environment (`assistant/.venv`) has lost the Python it was built with. This happens when a version manager such as mise
+upgrades Python and moves its `latest` link: the packages stay in the environment, but it now starts under a Python
+that has none of them. `run.sh` notices and shows a notification instead of failing quietly.
+
+Fix, quick: point the environment back at the Python it was made with (the number is `version =` in `.venv/pyvenv.cfg`):
+
+```bash
+cd assistant/.venv
+ln -sfn ~/.local/share/mise/installs/python/3.14.7/bin/python3 bin/python3
+sed -i 's#installs/python/latest/bin#installs/python/3.14.7/bin#' pyvenv.cfg
+systemctl --user reset-failed clove; systemctl --user start clove
+```
+
+Fix, lasting: rebuild it with a Python you will keep (`python3.14 -m venv .venv && .venv/bin/pip install -r requirements.txt`),
+or tell mise to keep that version (`mise use python@3.14`).
+
 ## Code map
 
 | File | Role |
